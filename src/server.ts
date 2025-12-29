@@ -19,6 +19,9 @@ app.post("/webhook/debug", (req: Request, res: Response) => {
 
 app.post("/webhook", async (req: Request, res: Response) => {
   try {
+    // eslint-disable-next-line no-console
+    console.log("[/webhook] incoming payload", JSON.stringify(req.body));
+
     if (config.webhookSharedSecret) {
       const headerSecret = req.header("x-webhook-secret");
       if (!headerSecret || headerSecret !== config.webhookSharedSecret) {
@@ -29,16 +32,26 @@ app.post("/webhook", async (req: Request, res: Response) => {
     let event;
     try {
       event = parseAutomationWebhook(req.body);
+      // eslint-disable-next-line no-console
+      console.log("[/webhook] parsed event", event);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Invalid webhook payload";
+      // eslint-disable-next-line no-console
+      console.error("[/webhook] parse error", message);
       return res.status(400).json({ ok: false, error: message });
     }
 
     if (event.newStatus !== "Done") {
+      // eslint-disable-next-line no-console
+      console.log("[/webhook] ignoring event because newStatus is not 'Done'", {
+        newStatus: event.newStatus,
+      });
       return res.status(200).json({ ignored: true });
     }
 
     const result = await handleEvent(event);
+    // eslint-disable-next-line no-console
+    console.log("[/webhook] fan-out result", result);
     return res.status(200).json({
       ok: result.ok,
       created: result.created,

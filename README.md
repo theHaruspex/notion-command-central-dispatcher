@@ -5,13 +5,13 @@ Minimal Node 20 + TypeScript service that receives Notion Automation webhooks an
 ### How it works
 
 - **/webhook** receives a POST from a Notion database automation (“Send webhook” action).
-- Payload is parsed into `{ taskId, objectiveId, triggerKey, newStatus }`.
+- Payload is parsed into `{ taskId, objectiveId, newStatus }` (and optional `triggerKey`).
 - If `newStatus !== "Done"`, the request is **ignored** with `200 { "ignored": true }`.
 - If `newStatus === "Done"`:
   - The service enumerates all Tasks under the Objective via the Objective’s Tasks relation.
   - It creates one Command page per Task in the Commands DB, setting:
     - **Target Task relation** → that task’s page ID.
-    - **Trigger Key** → the `triggerKey` value from the webhook.
+    - **Trigger Key** → either the `COMMAND_TRIGGER_KEY` env value, or (if unset) the `trigger_key` / `"Trigger Key"` from the webhook.
 - All Notion API calls are globally throttled to **3 requests/second** with lightweight retries on 429/5xx.
 
 ### Environment variables
@@ -33,6 +33,9 @@ OBJECTIVE_TASKS_RELATION_PROP_ID=objective-tasks-relation-prop-id
 
 # Optional shared secret for webhook validation
 WEBHOOK_SHARED_SECRET=replace-with-random-string
+
+# Optional default trigger key for created Commands
+COMMAND_TRIGGER_KEY=!hbKpp7\\7e5/
 ```
 
 > In your own repo, copy this into `.env.example` so others have a reference template.
@@ -137,13 +140,15 @@ With everything wired up:
 1. You change a demo Task’s **Status** to **Done** in Notion.
 2. Notion Automation fires the webhook to `/webhook`.
 3. The service:
-   - Parses the payload into `{ taskId, objectiveId, triggerKey, newStatus }`.
+   - Parses the payload into `{ taskId, objectiveId, newStatus }` and (optionally) `triggerKey`.
    - Verifies the shared secret (if configured).
    - Fetches all Tasks related to the Objective (pagination-safe).
    - Enqueues Notion API calls through a global throttle (max 3 req/s).
 4. It creates **N Command pages** in the Commands DB:
    - Each Command’s **Target Task** relation points at one Task under the Objective.
-   - Each Command’s **Trigger Key** rich_text matches the webhook’s `trigger_key`.
+   - Each Command’s **Trigger Key** rich_text is either:
+     - `COMMAND_TRIGGER_KEY` (if set), or
+     - the webhook’s `trigger_key` / `"Trigger Key"` value.
 5. The HTTP response is:
 
 ```json

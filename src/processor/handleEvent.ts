@@ -1,5 +1,8 @@
 import type { AutomationEvent, ProcessorResult } from "../types";
 import { getObjectiveTaskIds, createCommand } from "../notion/api";
+import { loadConfig } from "../config";
+
+const config = loadConfig();
 
 /**
  * Fan-out processor.
@@ -13,12 +16,28 @@ export async function handleEvent(event: AutomationEvent): Promise<ProcessorResu
   let created = 0;
   let failed = 0;
 
+  const triggerKey = config.commandTriggerKey ?? event.triggerKey;
+  if (!triggerKey) {
+    throw new Error(
+      "Missing trigger key: set COMMAND_TRIGGER_KEY in env or include trigger_key / 'Trigger Key' in the webhook payload",
+    );
+  }
+
+  // eslint-disable-next-line no-console
+  console.log("[processor] starting fan-out", {
+    objectiveId: event.objectiveId,
+    triggerKey,
+    taskCount: taskIds.length,
+  });
+
   await Promise.all(
     taskIds.map(async (taskId) => {
       try {
+        // eslint-disable-next-line no-console
+        console.log("[processor] creating command for task", taskId);
         await createCommand({
           targetTaskId: taskId,
-          triggerKey: event.triggerKey,
+          triggerKey,
         });
         created += 1;
       } catch (err) {

@@ -51,6 +51,12 @@ async function doFetchWithRetry(input: RequestInfo | URL, init: RequestInit, att
 
   if ((response.status === 429 || response.status >= 500) && attempt < MAX_RETRIES) {
     const delayMs = 2 ** (attempt - 1) * 500;
+    // eslint-disable-next-line no-console
+    console.warn("[notion:request] transient error, will retry", {
+      status: response.status,
+      attempt,
+      delayMs,
+    });
     await new Promise((r) => setTimeout(r, delayMs));
     return doFetchWithRetry(input, init, attempt + 1);
   }
@@ -83,6 +89,9 @@ export async function notionRequest(options: NotionRequestOptions): Promise<Resp
       ...extraHeaders,
     },
   };
+
+  // eslint-disable-next-line no-console
+  console.log("[notion:request] enqueue", { method: mergedInit.method, path });
 
   return enqueue(() => doFetchWithRetry(url, mergedInit));
 }

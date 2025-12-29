@@ -11,6 +11,7 @@ export interface AppConfig {
   commandsTriggerKeyPropId: string | null;
   objectiveTasksRelationPropId: string | null;
   webhookSharedSecret: string | null;
+  commandTriggerKey: string | null;
 }
 
 function requireEnv(name: string): string {
@@ -40,6 +41,7 @@ export function loadConfig(): AppConfig {
     commandsTriggerKeyPropId: process.env.COMMANDS_TRIGGER_KEY_PROP_ID ?? null,
     objectiveTasksRelationPropId: process.env.OBJECTIVE_TASKS_RELATION_PROP_ID ?? null,
     webhookSharedSecret: process.env.WEBHOOK_SHARED_SECRET ?? null,
+    commandTriggerKey: process.env.COMMAND_TRIGGER_KEY ?? null,
   };
 }
 

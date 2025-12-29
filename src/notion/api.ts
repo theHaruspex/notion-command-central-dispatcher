@@ -31,6 +31,8 @@ export async function getObjectiveTaskIds(objectiveId: string): Promise<string[]
     }
 
     const path = `/pages/${objectiveId}/properties/${config.objectiveTasksRelationPropId}?${searchParams.toString()}`;
+    // eslint-disable-next-line no-console
+    console.log("[notion:getObjectiveTaskIds] request", { objectiveId, path, cursor });
     const response = await notionRequest({ path, method: "GET" });
 
     if (!response.ok) {
@@ -40,6 +42,12 @@ export async function getObjectiveTaskIds(objectiveId: string): Promise<string[]
 
     const data = (await response.json()) as PagePropertyResponse;
     const results = data.results ?? [];
+    // eslint-disable-next-line no-console
+    console.log("[notion:getObjectiveTaskIds] page", {
+      count: results.length,
+      has_more: data.has_more,
+      next_cursor: data.next_cursor,
+    });
 
     for (const item of results) {
       if (item.relation?.id) {
@@ -92,6 +100,12 @@ export async function createCommand(input: CommandInput): Promise<void> {
       },
     },
   };
+
+  // eslint-disable-next-line no-console
+  console.log("[notion:createCommand] creating command", {
+    targetTaskId: input.targetTaskId,
+    triggerKeyPreview: input.triggerKey.slice(0, 50),
+  });
 
   const response = await notionRequest({
     path: "/pages",
