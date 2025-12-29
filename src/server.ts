@@ -41,14 +41,6 @@ app.post("/webhook", async (req: Request, res: Response) => {
       return res.status(400).json({ ok: false, error: message });
     }
 
-    if (event.newStatus !== "Done") {
-      // eslint-disable-next-line no-console
-      console.log("[/webhook] ignoring event because newStatus is not 'Done'", {
-        newStatus: event.newStatus,
-      });
-      return res.status(200).json({ ignored: true });
-    }
-
     const result = await handleEvent(event);
     // eslint-disable-next-line no-console
     console.log("[/webhook] fan-out result", result);

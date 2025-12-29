@@ -6,10 +6,9 @@ Minimal Node 20 + TypeScript service that receives Notion Automation webhooks an
 
 - **/webhook** receives a POST from a Notion database automation (“Send webhook” action).
 - Payload is parsed into `{ taskId, objectiveId, newStatus }` (and optional `triggerKey`).
-- If `newStatus !== "Done"`, the request is **ignored** with `200 { "ignored": true }`.
-- If `newStatus === "Done"`:
-  - The service enumerates all Tasks under the Objective via the Objective’s Tasks relation.
-  - It creates one Command page per Task in the Commands DB, setting:
+- The service always:
+  - Enumerates all Tasks under the Objective via the Objective’s Tasks relation.
+  - Creates one Command page per Task in the Commands DB, setting:
     - **Target Task relation** → that task’s page ID.
     - **Trigger Key** → either the `COMMAND_TRIGGER_KEY` env value, or (if unset) the `trigger_key` / `"Trigger Key"` from the webhook.
 - All Notion API calls are globally throttled to **3 requests/second** with lightweight retries on 429/5xx.
