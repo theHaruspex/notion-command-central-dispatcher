@@ -1,0 +1,209 @@
+
+
+CURSOR PROJECT BRIEF — Notion Automation Webhook → Fan-out Commands (TypeScript)
+
+Objective
+
+Build a minimal TypeScript integration with two layers:
+	1.	Webhook Listener (pure): receives webhooks sent by Notion Automations (database automation “Send webhook” action). This is not Notion’s subscription webhooks product—treat it as a generic incoming HTTP POST from Notion automation.
+	2.	Processor (dumb fan-out): given one event, create one Command page per Task in the Objective inside the Automation Central Commands database.
+
+This integration must be “dumb as fuck”:
+	•	It does not update Tasks directly.
+	•	It does not compute workflow logic.
+	•	It only creates Command pages with Target Task relation and Trigger Key (text).
+	•	Notion formulas/automations handle directives and status writes.
+
+MVP Behavior
+
+When a front-end user changes a Task’s Status (Notion automation fires webhook):
+	1.	Integration receives webhook.
+	2.	Integration extracts:
+	•	trigger_task_id (page id)
+	•	objective_id (page id, relation property from Task)
+	•	trigger_key (TEXT)
+	•	new_status
+	3.	Integration filters: only process when new_status == "Done".
+	4.	Integration enumerates all tasks under the objective (pagination-safe).
+	5.	Integration creates N Command pages in the Commands DB:
+	•	one per task id under the objective
+	•	sets:
+	•	Target Task relation = that task id
+	•	Trigger Key = trigger_key (TEXT)
+	6.	All Notion API calls must be throttled to 3 requests/second globally.
+
+Non-goals (explicitly do not build)
+	•	No Objective “Latest Objective Event ID”
+	•	No idempotency/dedupe (for demo only)
+	•	No Runs DB
+	•	No Events DB
+	•	No schema introspection beyond what is required to write with property IDs
+	•	No direct Task updates (only create command pages)
+
+⸻
+
+Implementation Requirements
+
+Tech stack
+	•	Node.js 20
+	•	TypeScript
+	•	Express or Fastify (choose one; keep simple)
+	•	Use native fetch (or undici) for HTTP calls
+	•	Rate limiting: implement a global throttle 3 requests per second (use a queue or a small library like bottleneck; either is fine)
+
+Repo structure
+
+Use this (or very close) so it’s maintainable:
+	•	src/server.ts — server + routes
+	•	src/config.ts — env parsing/validation
+	•	src/webhook/parse.ts — parse raw payload into internal event type
+	•	src/webhook/debug.ts — optional debug handler
+	•	src/notion/client.ts — throttled Notion client wrapper
+	•	src/notion/api.ts — typed functions:
+	•	getObjectiveTaskIds(objectiveId: string): Promise<string[]>
+	•	createCommand(command: { targetTaskId: string; triggerKey: string }): Promise<void>
+	•	src/processor/handleEvent.ts — the fan-out processor
+	•	src/types.ts
+	•	samples/ — captured webhook payload JSON examples
+	•	README.md
+
+Environment variables
+
+Provide .env.example with:
+	•	PORT=3000
+	•	NOTION_TOKEN=secret_...
+	•	NOTION_VERSION=2022-06-28
+
+Commands database:
+	•	COMMANDS_DB_ID=...
+	•	COMMANDS_TARGET_TASK_PROP_ID=...  (relation property id in Commands DB)
+	•	COMMANDS_TRIGGER_KEY_PROP_ID=...  (text/rich_text property id in Commands DB)
+
+Objective tasks relation:
+	•	OBJECTIVE_TASKS_RELATION_PROP_ID=... (property id of the Objective’s “Tasks” relation property)
+
+Webhook security (optional but recommended):
+	•	WEBHOOK_SHARED_SECRET=...
+
+Endpoints
+
+Implement:
+	1.	GET /health → { ok: true }
+	2.	POST /webhook/debug
+	•	logs headers + body
+	•	returns 200 always
+	•	used to capture sample payloads into samples/
+	3.	POST /webhook
+	•	validates shared secret header if configured
+	•	parses payload into internal event
+	•	if new_status != "Done" return 200 with {ignored:true}
+	•	otherwise calls processor to fan-out commands
+	•	return 200 {ok:true, created:N}
+
+Webhook parsing
+
+Because Notion Automation webhook payload shape isn’t guaranteed, implement parsing in two phases:
+
+Phase A (investigation):
+	•	First run /webhook/debug and capture 2–3 real payloads from Notion.
+	•	Save them in samples/ (e.g., done.json, in_progress.json).
+
+Phase B (parser):
+	•	Implement parseAutomationWebhook(payload): { taskId; objectiveId; triggerKey; newStatus }
+	•	The brief assumption is: you will configure Notion automation to include:
+	•	Task page id (or some stable identifier)
+	•	Objective relation (so objective page id can be extracted)
+	•	Trigger key (TEXT)
+	•	Status (new status value)
+
+If any field is missing, /webhook should 400 with a helpful error.
+
+Notion API usage (no research needed; use these exact endpoints and shapes)
+
+Base URL: https://api.notion.com/v1
+
+Headers for every request:
+	•	Authorization: Bearer ${NOTION_TOKEN}
+	•	Notion-Version: ${NOTION_VERSION}
+	•	Content-Type: application/json
+
+A) Enumerate all tasks under an objective (pagination-safe)
+Use “Retrieve page property item” for the Objective’s Tasks relation property:
+
+GET /pages/{objective_id}/properties/{OBJECTIVE_TASKS_RELATION_PROP_ID}
+
+Handle pagination using start_cursor until has_more is false.
+
+Expected response includes results, where each result contains a relation item with an id (page id). Extract all task page ids into an array.
+
+B) Create a command page in Commands DB
+Use “Create a page”:
+
+POST /pages
+
+Body (use property IDs as keys; do not rely on property names):
+
+{
+  "parent": { "database_id": "COMMANDS_DB_ID" },
+  "properties": {
+    "COMMANDS_TARGET_TASK_PROP_ID": {
+      "relation": [{ "id": "TASK_PAGE_ID" }]
+    },
+    "COMMANDS_TRIGGER_KEY_PROP_ID": {
+      "rich_text": [{ "text": { "content": "TRIGGER_KEY_TEXT" } }]
+    }
+  }
+}
+
+Important: Trigger Key is TEXT, so implement it as rich_text.
+
+Global throttling (hard requirement)
+
+All Notion API calls (GET and POST) must go through one global throttle:
+	•	Max 3 requests per second total
+	•	Fan-out creation must enqueue requests and respect the throttle.
+
+Error handling (MVP)
+	•	If Notion returns 429/5xx, retry up to 3 times with exponential backoff (lightweight).
+	•	If a single command creation fails during fan-out:
+	•	log error
+	•	continue (demo-friendly)
+	•	return { ok: true, created: X, failed: Y }
+
+⸻
+
+Acceptance Criteria
+	•	Running locally, with Notion automation pointed at /webhook:
+	1.	Change a demo task’s Status to Done
+	2.	Integration receives webhook and processes it
+	3.	Integration fetches all tasks for that objective (pagination-safe)
+	4.	Integration creates one command per task in the Commands DB
+	5.	Each created command has:
+	•	Target Task relation populated correctly
+	•	Trigger Key rich_text populated correctly
+	6.	Integration never exceeds 3 Notion API calls/sec
+
+⸻
+
+Development Plan + Commit Rules (follow exactly)
+
+Make small commits in this order:
+	1.	chore: scaffold server, config, health endpoint
+	2.	feat: add webhook debug endpoint and save sample payloads
+	3.	feat: implement webhook parser and validation
+	4.	feat: add throttled Notion client (3 rps) + retry
+	5.	feat: enumerate objective tasks via page property item pagination
+	6.	feat: create command pages (fan-out) using property IDs
+	7.	docs: add README runbook and .env.example
+
+Each commit must leave the repo in a runnable state.
+
+⸻
+
+README Runbook (must include)
+	•	How to run locally
+	•	How to set env vars
+	•	How to expose local server (ngrok)
+	•	How to configure Notion automation “Send webhook” to include required properties
+	•	A sample webhook payload example (from samples/)
+	•	Expected outcome: “N command pages created”
