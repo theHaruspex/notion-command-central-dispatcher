@@ -70,11 +70,10 @@ export function parseAutomationWebhook(payload: unknown): AutomationEvent {
 
   const statusProp = asObject(properties.Status as unknown);
   const status = (statusProp as any).status;
-  const newStatus =
-    (status && typeof status.name === "string" && status.name) ||
-    (() => {
-      throw new Error("Missing Status name on properties.Status.status.name");
-    })();
+  let newStatus = "Unknown";
+  if (status && typeof status.name === "string" && status.name.trim().length > 0) {
+    newStatus = status.name;
+  }
 
   // Optional trigger key: only from explicit fields/properties; no automation IDs
   let triggerKey: string | undefined;
