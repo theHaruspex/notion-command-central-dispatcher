@@ -34,6 +34,7 @@ export function parseDispatchYaml(routeName: string, yamlText: string): Dispatch
   for (const [databaseId, value] of Object.entries(rawMap)) {
     if (!databaseId.trim()) continue;
 
+    // Match-all for a DB
     if (value == null || (typeof value === "object" && Object.keys(value).length === 0)) {
       rules.push({
         routeName,
@@ -53,37 +54,25 @@ export function parseDispatchYaml(routeName: string, yamlText: string): Dispatch
     }
 
     const predicates = value as Record<string, unknown>;
-    const predicate: DispatchPredicate = {};
-    let unsupported = false;
+    const predicate: DispatchPredicate = { equals: {} };
+    let invalid = false;
 
-    for (const [key, v] of Object.entries(predicates)) {
-      if (key === "Status") {
-        if (typeof v === "string" && v.trim().length > 0) {
-          predicate.statusEquals = v;
-        } else {
-          // eslint-disable-next-line no-console
-          console.error("[dispatch] dispatch_rule_parse_failed", {
-            routeName,
-            databaseId,
-            error: "Status predicate must be a non-empty string",
-          });
-          unsupported = true;
-          break;
-        }
+    for (const [propName, v] of Object.entries(predicates)) {
+      if (typeof v === "string" && v.trim().length > 0) {
+        predicate.equals[propName] = v;
       } else {
-        // Unsupported predicate key
         // eslint-disable-next-line no-console
-        console.warn("[dispatch] dispatch_rule_unsupported_predicate", {
+        console.error("[dispatch] dispatch_rule_parse_failed", {
           routeName,
           databaseId,
-          key,
+          error: `Predicate for property '${propName}' must be a non-empty string`,
         });
-        unsupported = true;
+        invalid = true;
         break;
       }
     }
 
-    if (unsupported) {
+    if (invalid || Object.keys(predicate.equals).length === 0) {
       continue;
     }
 

@@ -47,6 +47,7 @@ export function parseSingleObjectWebhook(payload: unknown): DispatchEvent {
     originDatabaseId,
     originPageId,
     newStatusName,
+    properties,
   };
 }
 

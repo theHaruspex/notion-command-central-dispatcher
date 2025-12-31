@@ -9,10 +9,6 @@ import { matchRoutes } from "./dispatchConfig/match";
 import type { DispatchEvent } from "./dispatchConfig/match";
 import { getObjectiveIdForTask } from "./notion/api";
 import type { AutomationEvent } from "./types";
-import { loadConfig as loadAppConfig } from "./config";
-import { loadConfig as loadAppConfigAlias } from "./config";
-import { loadConfig as appLoadConfig } from "./config";
-import { loadConfig as cfg } from "./config";
 
 const config = loadConfig();
 const app = express();
@@ -99,6 +95,7 @@ app.post("/webhook", async (req: Request, res: Response) => {
       originDatabaseId: normalized.originDatabaseId,
       originPageId: normalized.originPageId,
       newStatusName: normalized.newStatusName,
+      properties: normalized.properties,
     };
 
     const matchedRoutes = matchRoutes(dispatchEvent, snapshot.routes);

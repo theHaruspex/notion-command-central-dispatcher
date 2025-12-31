@@ -2,6 +2,7 @@ export interface NormalizedEvent {
   originDatabaseId: string;
   originPageId: string;
   newStatusName: string;
+  properties: Record<string, any>;
 }
 
 interface RawBody {
@@ -51,6 +52,7 @@ export function normalizeWebhookEvent(payload: unknown): NormalizedEvent {
     originDatabaseId,
     originPageId,
     newStatusName,
+    properties,
   };
 }
 
