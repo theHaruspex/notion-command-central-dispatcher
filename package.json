@@ -1,5 +1,5 @@
 {
-  "name": "notion-objective-commands-fanout",
+  "name": "notion-command-central-dispatcher",
   "version": "1.0.0",
   "description": "Minimal Notion automation webhook → fan-out commands integration (TypeScript, Express)",
   "main": "dist/server.js",
