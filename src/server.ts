@@ -2,7 +2,7 @@ import express, { Request, Response } from "express";
 import { loadConfig } from "./config";
 import { handleDebugWebhook } from "./webhook/debug";
 import { parseAutomationWebhook } from "./webhook/parse";
-import { handleEvent } from "./processor/handleEvent";
+import { enqueueObjectiveEvent } from "./coordinator/objectiveCoordinator";
 
 const config = loadConfig();
 const app = express();
@@ -41,14 +41,9 @@ app.post("/webhook", async (req: Request, res: Response) => {
       return res.status(400).json({ ok: false, error: message });
     }
 
-    const result = await handleEvent(event);
-    // eslint-disable-next-line no-console
-    console.log("[/webhook] fan-out result", result);
-    return res.status(200).json({
-      ok: result.ok,
-      created: result.created,
-      failed: result.failed,
-    });
+    enqueueObjectiveEvent(event);
+
+    return res.status(200).json({ ok: true, enqueued: true });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("Unexpected error in /webhook:", err);
