@@ -2,10 +2,17 @@ import express, { Request, Response } from "express";
 import crypto from "crypto";
 import { loadConfig } from "./config";
 import { handleDebugWebhook } from "./webhook/debug";
-import { parseAutomationWebhook } from "./webhook/parse";
 import { enqueueObjectiveEvent } from "./coordinator/objectiveCoordinator";
-import { parseSingleObjectWebhook } from "./sources/singleObjectDemo/parseWebhook";
-import { handleSingleObjectEvent } from "./sources/singleObjectDemo/handle";
+import { normalizeWebhookEvent } from "./sources/normalizeWebhook";
+import { getDispatchConfigSnapshot } from "./dispatchConfig/cache";
+import { matchRoutes } from "./dispatchConfig/match";
+import type { DispatchEvent } from "./dispatchConfig/match";
+import { getObjectiveIdForTask } from "./notion/api";
+import type { AutomationEvent } from "./types";
+import { loadConfig as loadAppConfig } from "./config";
+import { loadConfig as loadAppConfigAlias } from "./config";
+import { loadConfig as appLoadConfig } from "./config";
+import { loadConfig as cfg } from "./config";
 
 const config = loadConfig();
 const app = express();
@@ -21,44 +28,10 @@ app.post("/webhook/debug", (req: Request, res: Response) => {
 });
 
 app.post("/webhook", async (req: Request, res: Response) => {
-  try {
-    // eslint-disable-next-line no-console
-    console.log("[/webhook] incoming payload", JSON.stringify(req.body));
-
-    if (config.webhookSharedSecret) {
-      const headerSecret = req.header("x-webhook-secret");
-      if (!headerSecret || headerSecret !== config.webhookSharedSecret) {
-        return res.status(401).json({ ok: false, error: "Invalid webhook shared secret" });
-      }
-    }
-
-    let event;
-    try {
-      event = parseAutomationWebhook(req.body);
-      // eslint-disable-next-line no-console
-      console.log("[/webhook] parsed event", event);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Invalid webhook payload";
-      // eslint-disable-next-line no-console
-      console.error("[/webhook] parse error", message);
-      return res.status(400).json({ ok: false, error: message });
-    }
-
-    enqueueObjectiveEvent(event);
-
-    return res.status(200).json({ ok: true, enqueued: true });
-  } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error("Unexpected error in /webhook:", err);
-    return res.status(500).json({ ok: false, error: "Internal server error" });
-  }
-});
-
-app.post("/webhook/single-object", async (req: Request, res: Response) => {
   const requestId = crypto.randomUUID();
   try {
     // eslint-disable-next-line no-console
-    console.log("[/webhook/single-object] webhook_received", {
+    console.log("[/webhook] webhook_received", {
       request_id: requestId,
       body: req.body,
     });
@@ -70,34 +43,137 @@ app.post("/webhook/single-object", async (req: Request, res: Response) => {
       }
     }
 
-    let event;
+    let normalized;
     try {
-      event = parseSingleObjectWebhook(req.body);
+      normalized = normalizeWebhookEvent(req.body);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Invalid webhook payload";
       // eslint-disable-next-line no-console
-      console.error("[/webhook/single-object] parse error", {
-        request_id: requestId,
-        error: message,
-      });
-      return res.status(400).json({ ok: false, error: message });
+      console.error("[/webhook] parse error", { request_id: requestId, error: message });
+      return res.status(400).json({ ok: false, error: message, request_id: requestId });
     }
 
-    const result = await handleSingleObjectEvent(event, requestId);
+    const snapshot = await getDispatchConfigSnapshot();
+
+    let fanoutApplied = false;
+    let objectiveId: string | null = null;
+
+    // Fan-out path driven by ObjectiveFanoutConfig row
+    const fanoutMapping = snapshot.fanoutMappings.find(
+      (m) => m.taskDatabaseId === normalized.originDatabaseId,
+    );
+
+    if (fanoutMapping) {
+      // eslint-disable-next-line no-console
+      console.log("[/webhook] fanout_mapping_matched", {
+        request_id: requestId,
+        origin_database_id: normalized.originDatabaseId,
+      });
+
+      objectiveId = await getObjectiveIdForTask(
+        normalized.originPageId,
+        fanoutMapping.taskObjectivePropId,
+      );
+
+      if (objectiveId) {
+        fanoutApplied = true;
+        // eslint-disable-next-line no-console
+        console.log("[/webhook] fanout_started", {
+          request_id: requestId,
+          objective_id: objectiveId,
+        });
+
+        const fanoutEvent: AutomationEvent = {
+          taskId: normalized.originPageId,
+          objectiveId,
+          newStatus: normalized.newStatusName,
+          objectiveTasksRelationPropIdOverride: fanoutMapping.objectiveTasksPropId,
+        };
+
+        enqueueObjectiveEvent(fanoutEvent);
+      }
+    }
+
+    // Normal dispatch rules
+    const dispatchEvent: DispatchEvent = {
+      originDatabaseId: normalized.originDatabaseId,
+      originPageId: normalized.originPageId,
+      newStatusName: normalized.newStatusName,
+    };
+
+    const matchedRoutes = matchRoutes(dispatchEvent, snapshot.routes);
+
+    // eslint-disable-next-line no-console
+    console.log("[/webhook] dispatch_routing_decision", {
+      request_id: requestId,
+      origin_database_id: normalized.originDatabaseId,
+      origin_page_id: normalized.originPageId,
+      new_status_name: normalized.newStatusName,
+      fanout_applied: fanoutApplied,
+      objective_id: objectiveId,
+      matched_routes: matchedRoutes.map((r) => r.routeName),
+    });
+
+    // Command creation for matched routes
+    if (!config.commandsDbId) {
+      throw new Error("COMMANDS_DB_ID is not configured");
+    }
+    if (!config.commandsTargetPagePropId) {
+      throw new Error("COMMANDS_TARGET_PAGE_PROP_ID is not configured");
+    }
+
+    let commandsCreated = 0;
+
+    for (const route of matchedRoutes) {
+      const title = route.routeName;
+
+      const body: any = {
+        parent: {
+          database_id: config.commandsDbId,
+        },
+        properties: {
+          [config.commandsTargetPagePropId]: {
+            relation: [{ id: normalized.originPageId }],
+          },
+        },
+      };
+
+      if (config.commandsCommandNamePropId) {
+        body.properties[config.commandsCommandNamePropId] = {
+          title: [
+            {
+              text: {
+                content: title,
+              },
+            },
+          ],
+        };
+      } else {
+        body.properties.Name = {
+          title: [
+            {
+              text: {
+                content: title,
+              },
+            },
+          ],
+        };
+      }
+    }
 
     return res.status(200).json({
       ok: true,
       request_id: requestId,
-      matched_routes: result.matchedRoutes,
-      commands_created: result.commandsCreated,
+      fanout_applied: fanoutApplied,
+      objective_id: objectiveId,
+      matched_routes: matchedRoutes.map((r) => r.routeName),
     });
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error("[/webhook/single-object] unexpected_error", {
-      request_id: requestId,
+    console.error("[/webhook] unexpected_error", {
       error: err,
     });
-    return res.status(500).json({ ok: false, error: "Internal server error", request_id: requestId });
+    return res.status(500).json({ ok: false, error: "Internal server error" });
   }
 });
 

@@ -8,4 +8,15 @@ export interface DispatchRoute {
   predicate?: DispatchPredicate;
 }
 
+export interface FanoutMapping {
+  taskDatabaseId: string;
+  taskObjectivePropId: string;
+  objectiveTasksPropId: string;
+}
+
+export interface DispatchConfigSnapshot {
+  fanoutMappings: FanoutMapping[];
+  routes: DispatchRoute[];
+}
+
 

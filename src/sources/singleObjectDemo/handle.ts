@@ -1,4 +1,4 @@
-import { getDispatchRoutes } from "../../dispatchConfig/cache";
+import { getDispatchConfigSnapshot } from "../../dispatchConfig/cache";
 import { matchRoutes } from "../../dispatchConfig/match";
 import type { DispatchEvent } from "../../dispatchConfig/match";
 import { loadConfig } from "../../config";
@@ -12,8 +12,8 @@ interface SingleObjectResult {
 }
 
 export async function handleSingleObjectEvent(event: DispatchEvent, requestId: string): Promise<SingleObjectResult> {
-  const routes = await getDispatchRoutes();
-  const matched = matchRoutes(event, routes);
+  const snapshot = await getDispatchConfigSnapshot();
+  const matched = matchRoutes(event, snapshot.routes);
 
   const matchedRouteNames = matched.map((r) => r.routeName);
 

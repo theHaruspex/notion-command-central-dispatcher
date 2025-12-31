@@ -11,7 +11,10 @@ const config = loadConfig();
  * enumerate all tasks under the objective and create one Command page per task.
  */
 export async function handleEvent(event: AutomationEvent): Promise<ProcessorResult> {
-  const taskIds = await getObjectiveTaskIds(event.objectiveId);
+  const taskIds = await getObjectiveTaskIds(
+    event.objectiveId,
+    event.objectiveTasksRelationPropIdOverride,
+  );
 
   let created = 0;
   let failed = 0;

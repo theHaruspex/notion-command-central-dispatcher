@@ -1,5 +1,5 @@
 import yaml from "js-yaml";
-import type { DispatchRoute, DispatchPredicate } from "./types";
+import type { DispatchRoute, DispatchPredicate, FanoutMapping } from "./types";
 
 interface RawRuleMap {
   [databaseId: string]: null | Record<string, unknown> | undefined;
@@ -96,5 +96,75 @@ export function parseDispatchYaml(routeName: string, yamlText: string): Dispatch
 
   return rules;
 }
+
+interface RawFanoutMapValue {
+  task_objective_prop_id?: unknown;
+  objective_tasks_prop_id?: unknown;
+  [key: string]: unknown;
+}
+
+export function parseFanoutYaml(routeName: string, yamlText: string): FanoutMapping[] {
+  const mappings: FanoutMapping[] = [];
+
+  if (!yamlText.trim()) {
+    return mappings;
+  }
+
+  let raw: unknown;
+  try {
+    raw = yaml.load(yamlText);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[dispatch] fanout_config_parse_failed", { routeName, error: err });
+    return mappings;
+  }
+
+  if (!raw || typeof raw !== "object") {
+    // eslint-disable-next-line no-console
+    console.error("[dispatch] fanout_config_parse_failed", {
+      routeName,
+      error: "YAML must be a mapping of task_db_id -> { task_objective_prop_id, objective_tasks_prop_id }",
+    });
+    return mappings;
+  }
+
+  const rawMap = raw as Record<string, RawFanoutMapValue>;
+
+  for (const [taskDatabaseId, value] of Object.entries(rawMap)) {
+    if (!taskDatabaseId.trim()) continue;
+    if (!value || typeof value !== "object") {
+      // eslint-disable-next-line no-console
+      console.error("[dispatch] fanout_config_parse_failed", {
+        routeName,
+        taskDatabaseId,
+        error: "Expected mapping with task_objective_prop_id and objective_tasks_prop_id",
+      });
+      continue;
+    }
+
+    const taskObjectivePropId = typeof value.task_objective_prop_id === "string" ? value.task_objective_prop_id : "";
+    const objectiveTasksPropId =
+      typeof value.objective_tasks_prop_id === "string" ? value.objective_tasks_prop_id : "";
+
+    if (!taskObjectivePropId || !objectiveTasksPropId) {
+      // eslint-disable-next-line no-console
+      console.error("[dispatch] fanout_config_parse_failed", {
+        routeName,
+        taskDatabaseId,
+        error: "Both task_objective_prop_id and objective_tasks_prop_id must be non-empty strings",
+      });
+      continue;
+    }
+
+    mappings.push({
+      taskDatabaseId,
+      taskObjectivePropId,
+      objectiveTasksPropId,
+    });
+  }
+
+  return mappings;
+}
+
 
 

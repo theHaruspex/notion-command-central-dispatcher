@@ -1,7 +1,7 @@
 import { loadConfig } from "../config";
 import { notionRequest } from "../notion/client";
-import type { DispatchRoute } from "./types";
-import { parseDispatchYaml } from "./parseYaml";
+import type { DispatchConfigSnapshot, DispatchRoute, FanoutMapping } from "./types";
+import { parseDispatchYaml, parseFanoutYaml } from "./parseYaml";
 
 const config = loadConfig();
 
@@ -48,16 +48,17 @@ function extractRichTextById(props: Record<string, any>, propId: string | null):
   return "";
 }
 
-export async function loadDispatchRoutes(): Promise<DispatchRoute[]> {
+export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
   if (!config.dispatchConfigDbId) {
     throw new Error("DISPATCH_CONFIG_DB_ID is not configured");
   }
 
   const routes: DispatchRoute[] = [];
+  const fanoutMappings: FanoutMapping[] = [];
   let cursor: string | null | undefined;
 
   // eslint-disable-next-line no-console
-  console.log("[dispatch] dispatch_cache_refresh_started", {
+  console.log("[dispatch] config_cache_refresh_started", {
     dispatchConfigDbId: config.dispatchConfigDbId,
   });
 
@@ -77,7 +78,7 @@ export async function loadDispatchRoutes(): Promise<DispatchRoute[]> {
     if (!response.ok) {
       const text = await response.text();
       // eslint-disable-next-line no-console
-      console.error("[dispatch] dispatch_cache_refresh_failed", {
+      console.error("[dispatch] config_cache_refresh_failed", {
         status: response.status,
         body: text,
       });
@@ -86,13 +87,19 @@ export async function loadDispatchRoutes(): Promise<DispatchRoute[]> {
 
     const data = (await response.json()) as QueryResponse;
     for (const page of data.results) {
-      const title = extractTitle(page.properties);
+      const title = extractTitle(page.properties) || page.id;
       const enabled = extractCheckboxById(page.properties, config.dispatchConfigEnabledPropId);
       if (!enabled) continue;
 
       const yamlText = extractRichTextById(page.properties, config.dispatchConfigRulePropId);
-      const parsed = parseDispatchYaml(title || page.id, yamlText);
-      routes.push(...parsed);
+
+      if (title === "ObjectiveFanoutConfig") {
+        const parsedFanout = parseFanoutYaml(title, yamlText);
+        fanoutMappings.push(...parsedFanout);
+      } else {
+        const parsedRoutes = parseDispatchYaml(title, yamlText);
+        routes.push(...parsedRoutes);
+      }
     }
 
     if (!data.has_more || !data.next_cursor) {
@@ -102,9 +109,15 @@ export async function loadDispatchRoutes(): Promise<DispatchRoute[]> {
   }
 
   // eslint-disable-next-line no-console
-  console.log("[dispatch] dispatch_cache_loaded", { count: routes.length });
+  console.log("[dispatch] config_cache_loaded", {
+    routes_count: routes.length,
+    fanout_count: fanoutMappings.length,
+  });
 
-  return routes;
+  return {
+    fanoutMappings,
+    routes,
+  };
 }
 
 

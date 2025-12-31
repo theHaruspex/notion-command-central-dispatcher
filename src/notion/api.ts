@@ -15,11 +15,11 @@ interface PagePropertyResponse {
   next_cursor?: string | null;
 }
 
-export async function getObjectiveTaskIds(objectiveId: string): Promise<string[]> {
-  if (!config.objectiveTasksRelationPropId) {
-    throw new Error("OBJECTIVE_TASKS_RELATION_PROP_ID is not configured");
+export async function getObjectiveTaskIds(objectiveId: string, tasksRelationPropId?: string): Promise<string[]> {
+  const relationPropId = tasksRelationPropId ?? config.objectiveTasksRelationPropId;
+  if (!relationPropId) {
+    throw new Error("Objective tasks relation property id is not configured");
   }
-
   const tasks: string[] = [];
   let cursor: string | undefined;
 
@@ -30,7 +30,7 @@ export async function getObjectiveTaskIds(objectiveId: string): Promise<string[]
       searchParams.set("start_cursor", cursor);
     }
 
-    const path = `/pages/${objectiveId}/properties/${config.objectiveTasksRelationPropId}?${searchParams.toString()}`;
+    const path = `/pages/${objectiveId}/properties/${relationPropId}?${searchParams.toString()}`;
     // eslint-disable-next-line no-console
     console.log("[notion:getObjectiveTaskIds] request", { objectiveId, path, cursor });
     const response = await notionRequest({ path, method: "GET" });
@@ -63,6 +63,45 @@ export async function getObjectiveTaskIds(objectiveId: string): Promise<string[]
   }
 
   return tasks;
+}
+
+export async function getObjectiveIdForTask(taskId: string, taskObjectivePropId: string): Promise<string | null> {
+  const path = `/pages/${taskId}/properties/${taskObjectivePropId}`;
+  // eslint-disable-next-line no-console
+  console.log("[notion:getObjectiveIdForTask] request", { taskId, path });
+
+  const response = await notionRequest({
+    path,
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to read task objective relation: ${response.status} ${text}`);
+  }
+
+  const data = (await response.json()) as any;
+
+  // Relation property items can appear directly or under results[]
+  const tryExtract = (source: any): string | null => {
+    if (!source) return null;
+    if (Array.isArray(source.relation) && source.relation.length > 0 && typeof source.relation[0].id === "string") {
+      return source.relation[0].id;
+    }
+    return null;
+  };
+
+  const direct = tryExtract(data);
+  if (direct) return direct;
+
+  if (Array.isArray(data.results) && data.results.length > 0) {
+    for (const item of data.results) {
+      const id = tryExtract(item);
+      if (id) return id;
+    }
+  }
+
+  return null;
 }
 
 export interface CommandInput {
