@@ -180,4 +180,33 @@ export async function createCommand(input: CommandInput): Promise<void> {
   }
 }
 
+export interface NotionPage {
+  id: string;
+  parent: { [key: string]: any };
+  properties: Record<string, any>;
+}
+
+export async function getPage(pageId: string): Promise<NotionPage> {
+  const path = `/pages/${pageId}`;
+  // eslint-disable-next-line no-console
+  console.log("[notion:getPage] request", { pageId, path });
+
+  const response = await notionRequest({
+    path,
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to fetch page ${pageId}: ${response.status} ${text}`);
+  }
+
+  const data = (await response.json()) as any;
+  return {
+    id: data.id,
+    parent: data.parent || {},
+    properties: (data.properties as Record<string, any>) || {},
+  };
+}
+
 
