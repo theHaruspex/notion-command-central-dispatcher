@@ -11,6 +11,7 @@ export interface AppConfig {
   commandsTriggerKeyPropId: string | null;
   commandsTargetPagePropId: string | null;
   commandsCommandNamePropId: string | null;
+  commandsDirectiveCommandPropId: string | null;
   objectiveTasksRelationPropId: string | null;
   webhookSharedSecret: string | null;
   commandTriggerKey: string | null;
@@ -46,6 +47,7 @@ export function loadConfig(): AppConfig {
     commandsTriggerKeyPropId: process.env.COMMANDS_TRIGGER_KEY_PROP_ID ?? null,
     commandsTargetPagePropId: process.env.COMMANDS_TARGET_PAGE_PROP_ID ?? null,
     commandsCommandNamePropId: process.env.COMMANDS_COMMAND_NAME_PROP_ID ?? null,
+     commandsDirectiveCommandPropId: process.env.COMMANDS_DIRECTIVE_COMMAND_PROP_ID ?? null,
     objectiveTasksRelationPropId: process.env.OBJECTIVE_TASKS_RELATION_PROP_ID ?? null,
     webhookSharedSecret: process.env.WEBHOOK_SHARED_SECRET ?? null,
     commandTriggerKey: process.env.COMMAND_TRIGGER_KEY ?? null,

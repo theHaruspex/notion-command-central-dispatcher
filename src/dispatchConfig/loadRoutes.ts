@@ -25,21 +25,29 @@ function extractTitle(props: Record<string, any>): string {
   return "";
 }
 
-function extractCheckboxById(props: Record<string, any>, propId: string | null): boolean {
-  if (!propId) return false;
-  for (const prop of Object.values(props)) {
-    if (prop && typeof prop === "object" && prop.id === propId && prop.type === "checkbox") {
-      return Boolean(prop.checkbox);
+/**
+ * Helpers that accept either a property **id** or **name**.
+ * In Notion page objects, `properties` is a map of name -> { id, type, ... }.
+ */
+function extractCheckboxByKey(props: Record<string, any>, key: string | null): boolean {
+  if (!key) return false;
+  for (const [name, prop] of Object.entries(props)) {
+    if (!prop || typeof prop !== "object") continue;
+    if ((prop as any).type !== "checkbox") continue;
+    if ((prop as any).id === key || name === key) {
+      return Boolean((prop as any).checkbox);
     }
   }
   return false;
 }
 
-function extractRichTextById(props: Record<string, any>, propId: string | null): string {
-  if (!propId) return "";
-  for (const prop of Object.values(props)) {
-    if (prop && typeof prop === "object" && prop.id === propId && prop.type === "rich_text") {
-      const segments = Array.isArray(prop.rich_text) ? prop.rich_text : [];
+function extractRichTextByKey(props: Record<string, any>, key: string | null): string {
+  if (!key) return "";
+  for (const [name, prop] of Object.entries(props)) {
+    if (!prop || typeof prop !== "object") continue;
+    if ((prop as any).type !== "rich_text") continue;
+    if ((prop as any).id === key || name === key) {
+      const segments = Array.isArray((prop as any).rich_text) ? (prop as any).rich_text : [];
       return segments
         .map((t: any) => t.plain_text || t.text?.content || "")
         .join("");
@@ -55,6 +63,13 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
 
   const routes: DispatchRoute[] = [];
   const fanoutMappings: FanoutMapping[] = [];
+  let hasPages = false;
+
+  // Track whether the configured property keys actually exist in the DB schema.
+  let sawEnabledProp =
+    !config.dispatchConfigEnabledPropId || config.dispatchConfigEnabledPropId.trim().length === 0;
+  let sawRuleProp =
+    !config.dispatchConfigRulePropId || config.dispatchConfigRulePropId.trim().length === 0;
   let cursor: string | null | undefined;
 
   // eslint-disable-next-line no-console
@@ -87,11 +102,44 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
 
     const data = (await response.json()) as QueryResponse;
     for (const page of data.results) {
-      const title = extractTitle(page.properties) || page.id;
-      const enabled = extractCheckboxById(page.properties, config.dispatchConfigEnabledPropId);
+      hasPages = true;
+
+      const props = page.properties;
+
+      // Scan properties once to see if the configured keys line up with either an id or name.
+      if (config.dispatchConfigEnabledPropId && !sawEnabledProp) {
+        for (const [name, prop] of Object.entries(props)) {
+          if (
+            prop &&
+            typeof prop === "object" &&
+            (prop as any).type === "checkbox" &&
+            (((prop as any).id as string) === config.dispatchConfigEnabledPropId || name === config.dispatchConfigEnabledPropId)
+          ) {
+            sawEnabledProp = true;
+            break;
+          }
+        }
+      }
+
+      if (config.dispatchConfigRulePropId && !sawRuleProp) {
+        for (const [name, prop] of Object.entries(props)) {
+          if (
+            prop &&
+            typeof prop === "object" &&
+            (prop as any).type === "rich_text" &&
+            (((prop as any).id as string) === config.dispatchConfigRulePropId || name === config.dispatchConfigRulePropId)
+          ) {
+            sawRuleProp = true;
+            break;
+          }
+        }
+      }
+
+      const title = extractTitle(props) || page.id;
+      const enabled = extractCheckboxByKey(props, config.dispatchConfigEnabledPropId);
       if (!enabled) continue;
 
-      const yamlText = extractRichTextById(page.properties, config.dispatchConfigRulePropId);
+      const yamlText = extractRichTextByKey(props, config.dispatchConfigRulePropId);
 
       if (title === "ObjectiveFanoutConfig") {
         const parsedFanout = parseFanoutYaml(title, yamlText);
@@ -106,6 +154,18 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
       break;
     }
     cursor = data.next_cursor;
+  }
+
+  if (hasPages && (!sawEnabledProp || !sawRuleProp)) {
+    // eslint-disable-next-line no-console
+    console.error("[dispatch] config_props_misconfigured", {
+      dispatchConfigDbId: config.dispatchConfigDbId,
+      missingEnabledProp:
+        !!config.dispatchConfigEnabledPropId && !sawEnabledProp ? config.dispatchConfigEnabledPropId : null,
+      missingRuleProp:
+        !!config.dispatchConfigRulePropId && !sawRuleProp ? config.dispatchConfigRulePropId : null,
+    });
+    throw new Error("Dispatch config properties are misconfigured; see logs for details.");
   }
 
   // eslint-disable-next-line no-console

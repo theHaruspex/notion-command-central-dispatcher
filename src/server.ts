@@ -8,6 +8,7 @@ import { getDispatchConfigSnapshot } from "./dispatchConfig/cache";
 import { matchRoutes } from "./dispatchConfig/match";
 import type { DispatchEvent } from "./dispatchConfig/match";
 import { getObjectiveIdForTask } from "./notion/api";
+import { notionRequest } from "./notion/client";
 import type { AutomationEvent } from "./types";
 
 const config = loadConfig();
@@ -135,6 +136,16 @@ app.post("/webhook", async (req: Request, res: Response) => {
         },
       };
 
+      if (config.commandsDirectiveCommandPropId) {
+        body.properties[config.commandsDirectiveCommandPropId] = {
+          multi_select: [
+            {
+              name: title,
+            },
+          ],
+        };
+      }
+
       if (config.commandsCommandNamePropId) {
         body.properties[config.commandsCommandNamePropId] = {
           title: [
@@ -156,6 +167,33 @@ app.post("/webhook", async (req: Request, res: Response) => {
           ],
         };
       }
+
+      // eslint-disable-next-line no-console
+      console.log("[/webhook] creating_dispatch_command", {
+        request_id: requestId,
+        routeName: title,
+        directive_command_prop_key: config.commandsDirectiveCommandPropId,
+        property_keys: Object.keys(body.properties),
+      });
+
+      const response = await notionRequest({
+        path: "/pages",
+        method: "POST",
+        body,
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        // eslint-disable-next-line no-console
+        console.error("[/webhook] create_command_failed", {
+          request_id: requestId,
+          routeName: title,
+          status: response.status,
+          body: text,
+        });
+      } else {
+        commandsCreated += 1;
+      }
     }
 
     return res.status(200).json({
@@ -164,6 +202,7 @@ app.post("/webhook", async (req: Request, res: Response) => {
       fanout_applied: fanoutApplied,
       objective_id: objectiveId,
       matched_routes: matchedRoutes.map((r) => r.routeName),
+      commands_created: commandsCreated,
     });
   } catch (err) {
     // eslint-disable-next-line no-console
