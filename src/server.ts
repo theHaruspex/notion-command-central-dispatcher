@@ -52,10 +52,43 @@ app.post("/webhook", async (req: Request, res: Response) => {
 
     const snapshot = await getDispatchConfigSnapshot();
 
+    // First, evaluate dispatch rules for the origin page.
+    // If no rules match, we do not fan out or create any commands.
+    const dispatchEvent: DispatchEvent = {
+      originDatabaseId: normalized.originDatabaseId,
+      originPageId: normalized.originPageId,
+      newStatusName: normalized.newStatusName,
+      properties: normalized.properties,
+    };
+
+    const matchedRoutes = matchRoutes(dispatchEvent, snapshot.routes);
+
     let fanoutApplied = false;
     let objectiveId: string | null = null;
 
-    // Fan-out path driven by ObjectiveFanoutConfig row
+    // eslint-disable-next-line no-console
+    console.log("[/webhook] dispatch_routing_decision", {
+      request_id: requestId,
+      origin_database_id: normalized.originDatabaseId,
+      origin_page_id: normalized.originPageId,
+      new_status_name: normalized.newStatusName,
+      fanout_applied: fanoutApplied,
+      objective_id: objectiveId,
+      matched_routes: matchedRoutes.map((r) => r.routeName),
+    });
+
+    if (matchedRoutes.length === 0) {
+      return res.status(200).json({
+        ok: true,
+        request_id: requestId,
+        fanout_applied: false,
+        objective_id: null,
+        matched_routes: [],
+        commands_created: 0,
+      });
+    }
+
+    // If at least one rule matched the origin, optionally fan out.
     const fanoutMapping = snapshot.fanoutMappings.find(
       (m) => m.taskDatabaseId === normalized.originDatabaseId,
     );
@@ -90,27 +123,6 @@ app.post("/webhook", async (req: Request, res: Response) => {
         enqueueObjectiveEvent(fanoutEvent);
       }
     }
-
-    // Normal dispatch rules
-    const dispatchEvent: DispatchEvent = {
-      originDatabaseId: normalized.originDatabaseId,
-      originPageId: normalized.originPageId,
-      newStatusName: normalized.newStatusName,
-      properties: normalized.properties,
-    };
-
-    const matchedRoutes = matchRoutes(dispatchEvent, snapshot.routes);
-
-    // eslint-disable-next-line no-console
-    console.log("[/webhook] dispatch_routing_decision", {
-      request_id: requestId,
-      origin_database_id: normalized.originDatabaseId,
-      origin_page_id: normalized.originPageId,
-      new_status_name: normalized.newStatusName,
-      fanout_applied: fanoutApplied,
-      objective_id: objectiveId,
-      matched_routes: matchedRoutes.map((r) => r.routeName),
-    });
 
     // Command creation for matched routes
     if (!config.commandsDbId) {
