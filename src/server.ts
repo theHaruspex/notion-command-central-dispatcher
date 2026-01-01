@@ -124,87 +124,91 @@ app.post("/webhook", async (req: Request, res: Response) => {
       }
     }
 
-    // Command creation for matched routes
-    if (!config.commandsDbId) {
-      throw new Error("COMMANDS_DB_ID is not configured");
-    }
-    if (!config.commandsTargetPagePropId) {
-      throw new Error("COMMANDS_TARGET_PAGE_PROP_ID is not configured");
-    }
-
+    // Command creation for matched routes (single-object path only).
+    // When fanout is applied, per-task commands are created in the fanout processor instead,
+    // so we skip origin-level command creation here to avoid duplicates.
     let commandsCreated = 0;
 
-    for (const route of matchedRoutes) {
-      const title = route.routeName;
+    if (!fanoutApplied) {
+      if (!config.commandsDbId) {
+        throw new Error("COMMANDS_DB_ID is not configured");
+      }
+      if (!config.commandsTargetPagePropId) {
+        throw new Error("COMMANDS_TARGET_PAGE_PROP_ID is not configured");
+      }
 
-      const body: any = {
-        parent: {
-          database_id: config.commandsDbId,
-        },
-        properties: {
-          [config.commandsTargetPagePropId]: {
-            relation: [{ id: normalized.originPageId }],
+      for (const route of matchedRoutes) {
+        const title = route.routeName;
+
+        const body: any = {
+          parent: {
+            database_id: config.commandsDbId,
           },
-        },
-      };
-
-      if (config.commandsDirectiveCommandPropId) {
-        body.properties[config.commandsDirectiveCommandPropId] = {
-          multi_select: [
-            {
-              name: title,
+          properties: {
+            [config.commandsTargetPagePropId]: {
+              relation: [{ id: normalized.originPageId }],
             },
-          ],
+          },
         };
-      }
 
-      if (config.commandsCommandNamePropId) {
-        body.properties[config.commandsCommandNamePropId] = {
-          title: [
-            {
-              text: {
-                content: title,
+        if (config.commandsDirectiveCommandPropId) {
+          body.properties[config.commandsDirectiveCommandPropId] = {
+            multi_select: [
+              {
+                name: title,
               },
-            },
-          ],
-        };
-      } else {
-        body.properties.Name = {
-          title: [
-            {
-              text: {
-                content: title,
+            ],
+          };
+        }
+
+        if (config.commandsCommandNamePropId) {
+          body.properties[config.commandsCommandNamePropId] = {
+            title: [
+              {
+                text: {
+                  content: title,
+                },
               },
-            },
-          ],
-        };
-      }
+            ],
+          };
+        } else {
+          body.properties.Name = {
+            title: [
+              {
+                text: {
+                  content: title,
+                },
+              },
+            ],
+          };
+        }
 
-      // eslint-disable-next-line no-console
-      console.log("[/webhook] creating_dispatch_command", {
-        request_id: requestId,
-        routeName: title,
-        directive_command_prop_key: config.commandsDirectiveCommandPropId,
-        property_keys: Object.keys(body.properties),
-      });
-
-      const response = await notionRequest({
-        path: "/pages",
-        method: "POST",
-        body,
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
         // eslint-disable-next-line no-console
-        console.error("[/webhook] create_command_failed", {
+        console.log("[/webhook] creating_dispatch_command", {
           request_id: requestId,
           routeName: title,
-          status: response.status,
-          body: text,
+          directive_command_prop_key: config.commandsDirectiveCommandPropId,
+          property_keys: Object.keys(body.properties),
         });
-      } else {
-        commandsCreated += 1;
+
+        const response = await notionRequest({
+          path: "/pages",
+          method: "POST",
+          body,
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          // eslint-disable-next-line no-console
+          console.error("[/webhook] create_command_failed", {
+            request_id: requestId,
+            routeName: title,
+            status: response.status,
+            body: text,
+          });
+        } else {
+          commandsCreated += 1;
+        }
       }
     }
 

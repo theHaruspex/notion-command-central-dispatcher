@@ -63,6 +63,15 @@ export function matchRoutes(event: DispatchEvent, routes: DispatchRoute[]): Disp
       const actual = getPropertyStringValue(prop);
       if (actual !== expected) {
         allMatched = false;
+        // eslint-disable-next-line no-console
+        console.log("[dispatch] dispatch_rule_mismatch", {
+          routeName: route.routeName,
+          originDatabaseId: event.originDatabaseId,
+          originPageId: event.originPageId,
+          property: propName,
+          expected,
+          actual,
+        });
         break;
       }
     }

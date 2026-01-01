@@ -137,6 +137,14 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
 
       const title = extractTitle(props) || page.id;
       const enabled = extractCheckboxByKey(props, config.dispatchConfigEnabledPropId);
+
+      // eslint-disable-next-line no-console
+      console.log("[dispatch] config_row_evaluated", {
+        page_id: page.id,
+        title,
+        enabled,
+      });
+
       if (!enabled) continue;
 
       const yamlText = extractRichTextByKey(props, config.dispatchConfigRulePropId);
