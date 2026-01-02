@@ -1,0 +1,254 @@
+Repo Structure & Module Responsibilities
+========================================
+
+This document describes the current architecture of the Notion Command Dispatch service. It is organized by module and file so another engineer or LLM can quickly see where behavior lives and how requests flow through the system.
+
+High-Level Flow
+---------------
+
+1. `src/server.ts` (HTTP transport)
+   - Express app that exposes:
+     - `GET /health` – liveness check.
+     - `POST /webhook` – single entrypoint for all Notion Automations.
+   - Responsibilities:
+     - Parse JSON (`express.json()`).
+     - Generate a `requestId` (UUID) per request.
+     - Log the raw webhook ingress: `[/webhook] webhook_received`.
+     - Enforce the optional shared secret from `WEBHOOK_SHARED_SECRET` header (`x-webhook-secret`).
+     - Call `normalizeWebhookEvent(req.body)` to convert the raw Notion payload into a `NormalizedEvent`.
+     - Delegate to `handleWebhookHttp({ requestId, normalizedEvent })`.
+     - Map thrown errors to HTTP responses:
+       - 400 for parse errors, with `{ ok: false, error, request_id }`.
+       - 401 for invalid shared secret.
+       - 500 for unexpected errors.
+
+2. `src/webhook/*` (webhook-specific concerns)
+   - `webhook/normalizeWebhook.ts`
+     - Exports:
+       - `export interface NormalizedEvent { originDatabaseId; originPageId; properties }`
+       - `export function normalizeWebhookEvent(payload: unknown): NormalizedEvent`
+     - Behavior:
+       - Asserts `payload` is an object with `data` object.
+       - Asserts `data.object === 'page'`.
+       - Extracts:
+         - `originPageId` from `data.id` (throws if missing).
+         - `originDatabaseId` from `data.parent.database_id` (throws if missing).
+         - `properties` from `data.properties` (plain Notion properties map).
+       - Returns `NormalizedEvent` that is agnostic to status or any specific property.
+
+   - `webhook/handleHttp.ts`
+     - Exports:
+       - `export interface HandleWebhookHttpArgs { requestId: string; normalizedEvent: NormalizedEvent }`
+       - `export async function handleWebhookHttp(args: HandleWebhookHttpArgs): Promise<DispatchWebhookResult>`
+     - Behavior:
+       - Thin HTTP-facing adapter that simply forwards to the dispatch layer:
+         - Calls `dispatchWebhookEvent({ requestId, normalizedEvent })`.
+       - Keeps `server.ts` unaware of dispatch internals while allowing tests to exercise webhook behavior without Express.
+
+Core Configuration
+------------------
+
+3. `src/config.ts`
+   - Loads and validates process-level configuration from environment variables via `dotenv`.
+   - Exposes a typed `loadConfig()` returning an immutable config object used across modules.
+   - Examples of fields:
+     - `port`, `notionToken`, `notionVersion`.
+     - Commands DB identifiers:
+       - `commandsDbId`
+       - `commandsTargetTaskPropId`
+       - `commandsTargetPagePropId`
+       - `commandsTriggerKeyPropId`
+       - `commandsDirectiveCommandPropId`
+     - Dispatch Config DB identifiers:
+       - `dispatchConfigDbId`
+       - `dispatchConfigEnabledPropId`
+     - Trigger key:
+       - `commandTriggerKey` (value written into `Trigger Key` property on Commands).
+     - Webhook shared secret:
+       - `webhookSharedSecret`.
+
+4. `src/types.ts`
+   - Defines shared domain types:
+     - `AutomationEvent`:
+       - `taskId`: origin task for the fanout job.
+       - `objectiveId`: the objective page to fan out over.
+       - `triggerKey?`: optional override for trigger key (usually env is used).
+       - `objectiveTasksRelationPropIdOverride?`: optional property override for Objective → Tasks relation.
+     - `ProcessorResult`:
+       - `{ ok: boolean; created: number; failed: number }` – summary of fanout runs.
+
+Dispatch Layer (Application Brain)
+----------------------------------
+
+5. `src/dispatch/index.ts`
+   - Central orchestrator for dispatching based on a `NormalizedEvent`.
+   - Exports:
+     - `export interface DispatchWebhookArgs { requestId; normalizedEvent }`
+     - `export interface DispatchWebhookResult { ok; request_id; fanout_applied; objective_id; matched_routes; commands_created }`
+     - `export async function dispatchWebhookEvent(args: DispatchWebhookArgs): Promise<DispatchWebhookResult>`
+   - Behavior:
+     1. Load Dispatch Config snapshot:
+        - Calls `configDatabase.getDispatchConfigSnapshot()` to get `{ routes, fanoutMappings }`.
+     2. Normalize the origin DB ID to a stable key:
+        - `originDatabaseIdKey = originDatabaseId.replace(/-/g, "").toLowerCase()`
+     3. Build `DispatchEvent`:
+        - `{ originDatabaseId: originDatabaseIdKey, originPageId, properties }`
+     4. Route matching:
+        - Calls `matchRoutes(dispatchEvent, snapshot.routes)`.
+        - Logs `[/webhook] dispatch_routing_decision` with relevant IDs and matched route names.
+        - If no routes match:
+          - Returns a no-op response with `fanout_applied = false`, `commands_created = 0`.
+     5. Fanout gating:
+        - Looks for a `FanoutMapping` for `originDatabaseIdKey` in `snapshot.fanoutMappings`.
+        - If found:
+          - Logs `fanout_mapping_matched`.
+          - Resolves objective ID via `getObjectiveIdForTask(originPageId, taskObjectivePropId)`.
+          - If an objective is found:
+            - Logs `fanout_started`.
+            - Builds `AutomationEvent`:
+              - `{ taskId: originPageId, objectiveId, objectiveTasksRelationPropIdOverride: objectiveTasksPropId }`.
+            - Calls `fanout.enqueueObjectiveEvent(event)` (delegated to fanout subsystem).
+            - Marks `fanout_applied = true`.
+     6. Single-object command creation:
+        - If `fanout_applied` is `false` and routes matched:
+          - Validates required env config for Commands DB and properties.
+          - For each matched route:
+            - Builds the Commands page body:
+              - Parent: Commands DB ID.
+              - Properties:
+                - Target relation to the origin page.
+                - `Trigger Key` rich_text set to `commandTriggerKey`.
+                - `Directive: Command` multi_select containing the route name (if configured).
+                - Optional Command title field (or `Name` fallback) with the route name.
+            - Logs `creating_dispatch_command`.
+            - Sends `POST /pages` using the throttled Notion client.
+            - On success increments `commands_created`; on failure logs `create_command_failed`.
+     7. Response:
+        - Returns `DispatchWebhookResult` summarizing:
+          - Whether fanout was applied.
+          - Objective ID (if applicable).
+          - Matched routes.
+          - Number of commands created (single-object path only).
+
+6. `src/dispatch/match.ts`
+   - Defines:
+     - `DispatchEvent` – `{ originDatabaseId, originPageId, properties }`.
+     - `matchRoutes(event, routes)` – matches an event to a set of `DispatchRoute`s.
+   - `extractPropertyValue`:
+     - Interprets Notion property types into strings/arrays:
+       - `status`, `select`, `multi_select`, `title`, `rich_text`, `number`, `checkbox`.
+   - Matching:
+     - Filters routes by `databaseId`.
+     - For routes with predicates:
+       - For each `equals[propertyName] = expectedValue`:
+         - Uses `extractPropertyValue` on `event.properties[propertyName]`.
+         - Compares trimmed strings or multi_select arrays.
+       - Logs:
+         - `dispatch_rule_mismatch` when a predicate fails.
+         - `dispatch_rule_matched` when a route matches.
+
+7. `src/dispatch/configDatabase/*` (Dispatch Config DB subsystem)
+   - `configDatabase/types.ts`
+     - `DispatchPredicate` – `equals: Record<string, string>`.
+     - `DispatchRoute` – `{ routeName, databaseId, predicate? }`.
+     - `FanoutMapping` – mapping per task DB:
+       - `taskDatabaseId`, `taskObjectivePropId`, `objectiveTasksPropId`, optional `conditionPropertyName/value`.
+     - `DispatchConfigSnapshot` – `{ routes: DispatchRoute[]; fanoutMappings: FanoutMapping[] }`.
+
+   - `configDatabase/loadRoutes.ts`
+     - Queries the Notion Dispatch Config DB (`DISPATCH_CONFIG_DB_ID`) using the shared throttled Notion client.
+     - Paginates through results and transforms each page into:
+       - A `DispatchRoute` when `Rule Tyoe = DispatchCommand`.
+       - A `FanoutMapping` when `Rule Tyoe = ObjectiveFanoutConfig`.
+     - Extracts values from Notion properties by *name* (rich_text) and supports env-driven checkbox IDs for `Enabled`.
+     - Logs:
+       - `config_cache_refresh_started`.
+       - Detailed row evaluation: `config_row_evaluated` and `config_row_properties`.
+       - `config_row_invalid` and `fanout_config_row_invalid` for bad rows.
+       - `config_db_empty` if no rows are found.
+
+   - `configDatabase/index.ts`
+     - Mini-orchestrator and public entrypoint to the config DB subsystem.
+     - Exports:
+       - Types: `DispatchConfigSnapshot`, `DispatchRoute`, `FanoutMapping`.
+       - Service: `getDispatchConfigSnapshot()`.
+     - Internals:
+       - Maintains an in-memory cache with TTL 60s.
+       - On cold start:
+         - Calls `loadDispatchConfig()` and blocks until snapshot is available.
+       - On subsequent calls:
+         - Returns cached snapshot immediately.
+         - If TTL expired and no refresh in progress:
+           - Logs `config_cache_refresh_started_async`.
+           - Triggers an async refresh; logs `config_cache_refresh_failed` on error.
+
+8. `src/dispatch/fanout/*` (fanout subsystem)
+   - `fanout/runObjectiveFanout.ts`
+     - Implements the fanout execution logic:
+       - Calls `getObjectiveTaskIds(objectiveId, override?)` to enumerate all tasks under the Objective.
+       - Determines the `triggerKey` from env or the event.
+       - Validates that Commands DB and relevant properties are configured.
+       - Loads Dispatch Config snapshot from `configDatabase`.
+       - For each task:
+         - Fetches the task page via `getPage(taskId)`.
+         - Normalizes the parent database ID and builds a `DispatchEvent`.
+         - Calls `matchRoutes` to find applicable routes.
+         - For each matched route:
+           - Constructs a Commands page body with:
+             - Parent set to Commands DB.
+             - `Target Task` relation.
+             - `Trigger Key` rich_text set to `triggerKey`.
+             - `Directive: Command` multi_select containing the route name (if configured).
+           - Logs `creating_dispatch_command_for_task`.
+           - Sends `POST /pages` with `notionRequest`.
+           - Increments `created` or `failed` and logs `create_command_failed` on errors.
+       - Returns `ProcessorResult` summarizing created/failed counts.
+
+   - `fanout/index.ts`
+     - Mini-orchestrator for fanout scheduling and single-flight semantics.
+     - Internal state:
+       - `Map<objectiveId, { inFlight: boolean }>` to ensure only one run per objective at a time.
+     - Key functions:
+       - `enqueueObjectiveEvent(event: AutomationEvent)`:
+         - If `state.inFlight` is true for that objective:
+           - Logs `objective_run_skipped_in_flight` and drops the event.
+         - Else:
+           - Marks `inFlight = true`.
+           - Calls `runForObjective` in the background.
+       - `runForObjective(objectiveId, event)`:
+         - Logs `run_started`.
+         - Awaits `runObjectiveFanout(event)` and logs `run_failed` on errors.
+         - Clears `inFlight` and logs `run_completed` when done.
+     - Public API:
+       - `enqueueObjectiveEvent` – the only method used by `dispatch/index.ts` to trigger fanout.
+       - `runObjectiveFanout` is also re-exported for advanced use or direct testing.
+
+Notion Client Layer
+-------------------
+
+9. `src/notion/client.ts`
+   - Implements a throttled HTTP client for Notion’s REST API.
+   - Enforces a global limit of ~3 requests/second using an in-process queue.
+   - Adds retry logic (with exponential backoff) for 429 and 5xx responses.
+   - Exports a `notionRequest({ path, method, body })` wrapper that all other modules use.
+
+10. `src/notion/api.ts`
+   - Higher-level helpers built on `notionRequest`:
+     - `getObjectiveTaskIds(objectiveId, objectiveTasksRelationPropIdOverride?)`:
+       - Enumerates all Task IDs under an Objective using the relation property, handling Notion pagination.
+     - `getObjectiveIdForTask(taskId, taskObjectivePropId)`:
+       - Reads the Objective relation from a Task’s properties, supporting both property-item and direct relation shapes.
+     - `getPage(pageId)`:
+       - Fetches a full Notion page and returns its `id`, `parent`, and `properties`.
+
+Summary
+-------
+
+- `server.ts` is a pure HTTP transport that delegates to `webhook/handleHttp.ts`.
+- `webhook` owns Notion-specific payload normalization and HTTP-level dispatch into the app.
+- `dispatch/index.ts` is the single application orchestrator for webhook events.
+- `dispatch/configDatabase` is the Notion-backed, cached Dispatch Config DB.
+- `dispatch/fanout` is the objective fanout subsystem, coordinated and invoked only by dispatch.
+- `notion/*` provides a throttled, retrying Notion API client and higher-level helpers.
+
+
