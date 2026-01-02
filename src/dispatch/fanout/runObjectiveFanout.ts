@@ -1,6 +1,6 @@
 import type { AutomationEvent, ProcessorResult } from "../../types";
 import { loadConfig } from "../../config";
-import { createCommand } from "../../commands/createCommand";
+import { createCommand } from "../createCommand";
 
 const config = loadConfig();
 
