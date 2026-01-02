@@ -35,18 +35,10 @@ export function parseSingleObjectWebhook(payload: unknown): DispatchEvent {
         })();
 
   const properties = asObject(data.properties);
-  const statusProp = asObject(properties.Status as unknown);
-  const status = (statusProp as any).status;
-
-  let newStatusName = "Unknown";
-  if (status && typeof status.name === "string" && status.name.trim().length > 0) {
-    newStatusName = status.name;
-  }
 
   return {
     originDatabaseId,
     originPageId,
-    newStatusName,
     properties,
   };
 }

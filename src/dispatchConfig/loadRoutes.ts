@@ -1,7 +1,6 @@
 import { loadConfig } from "../config";
 import { notionRequest } from "../notion/client";
-import type { DispatchConfigSnapshot, DispatchRoute, FanoutMapping } from "./types";
-import { parseDispatchYaml, parseFanoutYaml } from "./parseYaml";
+import type { DispatchConfigSnapshot, DispatchRoute, FanoutMapping, DispatchPredicate } from "./types";
 
 const config = loadConfig();
 
@@ -14,6 +13,10 @@ interface QueryResponse {
   results: NotionPage[];
   has_more?: boolean;
   next_cursor?: string | null;
+}
+
+function normalizeDatabaseId(id: string): string {
+  return id.replace(/-/g, "").toLowerCase();
 }
 
 function extractTitle(props: Record<string, any>): string {
@@ -64,12 +67,6 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
   const routes: DispatchRoute[] = [];
   const fanoutMappings: FanoutMapping[] = [];
   let hasPages = false;
-
-  // Track whether the configured property keys actually exist in the DB schema.
-  let sawEnabledProp =
-    !config.dispatchConfigEnabledPropId || config.dispatchConfigEnabledPropId.trim().length === 0;
-  let sawRuleProp =
-    !config.dispatchConfigRulePropId || config.dispatchConfigRulePropId.trim().length === 0;
   let cursor: string | null | undefined;
 
   // eslint-disable-next-line no-console
@@ -106,34 +103,47 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
 
       const props = page.properties;
 
-      // Scan properties once to see if the configured keys line up with either an id or name.
-      if (config.dispatchConfigEnabledPropId && !sawEnabledProp) {
-        for (const [name, prop] of Object.entries(props)) {
-          if (
-            prop &&
-            typeof prop === "object" &&
-            (prop as any).type === "checkbox" &&
-            (((prop as any).id as string) === config.dispatchConfigEnabledPropId || name === config.dispatchConfigEnabledPropId)
-          ) {
-            sawEnabledProp = true;
-            break;
-          }
-        }
-      }
+      const originDbIdProp = props["Origin Database ID"];
+      const originDatabaseIdRaw: string =
+        originDbIdProp && originDbIdProp.type === "rich_text" && Array.isArray(originDbIdProp.rich_text)
+          ? originDbIdProp.rich_text
+              .map((t: any) => t.plain_text || t.text?.content || "")
+              .join("")
+              .trim()
+          : "";
+      const originDatabaseId = originDatabaseIdRaw ? normalizeDatabaseId(originDatabaseIdRaw) : "";
 
-      if (config.dispatchConfigRulePropId && !sawRuleProp) {
-        for (const [name, prop] of Object.entries(props)) {
-          if (
-            prop &&
-            typeof prop === "object" &&
-            (prop as any).type === "rich_text" &&
-            (((prop as any).id as string) === config.dispatchConfigRulePropId || name === config.dispatchConfigRulePropId)
-          ) {
-            sawRuleProp = true;
-            break;
-          }
-        }
-      }
+      const ruleTypeProp = props["Rule Tyoe"];
+      const ruleType: string | null =
+        ruleTypeProp &&
+        typeof ruleTypeProp === "object" &&
+        ruleTypeProp.type === "select" &&
+        ruleTypeProp.select &&
+        typeof ruleTypeProp.select.name === "string"
+          ? ruleTypeProp.select.name
+          : null;
+
+      const conditionPropNameProp = props["Condition 1: Property Name"];
+      const conditionPropertyName: string =
+        conditionPropNameProp &&
+        conditionPropNameProp.type === "text" &&
+        Array.isArray(conditionPropNameProp.text)
+          ? conditionPropNameProp.text
+              .map((t: any) => t.plain_text || t.text?.content || "")
+              .join("")
+              .trim()
+          : "";
+
+      const conditionValueProp = props["Condition 1: Value"];
+      const conditionValue: string =
+        conditionValueProp &&
+        conditionValueProp.type === "text" &&
+        Array.isArray(conditionValueProp.text)
+          ? conditionValueProp.text
+              .map((t: any) => t.plain_text || t.text?.content || "")
+              .join("")
+              .trim()
+          : "";
 
       const title = extractTitle(props) || page.id;
       const enabled = extractCheckboxByKey(props, config.dispatchConfigEnabledPropId);
@@ -143,18 +153,84 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
         page_id: page.id,
         title,
         enabled,
+        originDatabaseId: originDatabaseIdRaw,
+        ruleType,
+        conditionPropertyName,
+        conditionValue,
+      });
+
+      // eslint-disable-next-line no-console
+      console.log("[dispatch] config_row_properties", {
+        page_id: page.id,
+        properties: props,
       });
 
       if (!enabled) continue;
 
-      const yamlText = extractRichTextByKey(props, config.dispatchConfigRulePropId);
+      if (!originDatabaseId || !ruleType) {
+        // eslint-disable-next-line no-console
+        console.error("[dispatch] config_row_invalid", {
+          page_id: page.id,
+          title,
+          originDatabaseId,
+          ruleType,
+        });
+        continue;
+      }
 
-      if (title === "ObjectiveFanoutConfig") {
-        const parsedFanout = parseFanoutYaml(title, yamlText);
-        fanoutMappings.push(...parsedFanout);
-      } else {
-        const parsedRoutes = parseDispatchYaml(title, yamlText);
-        routes.push(...parsedRoutes);
+      if (ruleType === "DispatchCommand") {
+        const pred: DispatchPredicate | undefined =
+          conditionPropertyName && conditionValue
+            ? { equals: { [conditionPropertyName]: conditionValue } }
+            : undefined;
+
+        routes.push({
+          routeName: title,
+          databaseId: originDatabaseId,
+          predicate: pred,
+        });
+      } else if (ruleType === "ObjectiveFanoutConfig") {
+        const taskObjectivePropIdProp = props["Task \u2192 Objective Property ID"];
+        const taskObjectivePropId: string =
+          taskObjectivePropIdProp &&
+          taskObjectivePropIdProp.type === "rich_text" &&
+          Array.isArray(taskObjectivePropIdProp.rich_text)
+            ? taskObjectivePropIdProp.rich_text
+                .map((t: any) => t.plain_text || t.text?.content || "")
+                .join("")
+                .trim()
+            : "";
+
+        const objectiveTasksPropIdProp = props["Objective \u2192 Tasks Property ID"];
+        const objectiveTasksPropId: string =
+          objectiveTasksPropIdProp &&
+          objectiveTasksPropIdProp.type === "rich_text" &&
+          Array.isArray(objectiveTasksPropIdProp.rich_text)
+            ? objectiveTasksPropIdProp.rich_text
+                .map((t: any) => t.plain_text || t.text?.content || "")
+                .join("")
+                .trim()
+            : "";
+
+        if (!taskObjectivePropId || !objectiveTasksPropId) {
+          // eslint-disable-next-line no-console
+          console.error("[dispatch] fanout_config_row_invalid", {
+            page_id: page.id,
+            title,
+            originDatabaseId,
+            taskObjectivePropId,
+            objectiveTasksPropId,
+          });
+          continue;
+        }
+
+        fanoutMappings.push({
+          taskDatabaseId: originDatabaseId,
+          taskObjectivePropId,
+          objectiveTasksPropId,
+          conditionPropertyName: conditionPropertyName || undefined,
+          conditionValue: conditionValue || undefined,
+        });
       }
     }
 
@@ -162,18 +238,6 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
       break;
     }
     cursor = data.next_cursor;
-  }
-
-  if (hasPages && (!sawEnabledProp || !sawRuleProp)) {
-    // eslint-disable-next-line no-console
-    console.error("[dispatch] config_props_misconfigured", {
-      dispatchConfigDbId: config.dispatchConfigDbId,
-      missingEnabledProp:
-        !!config.dispatchConfigEnabledPropId && !sawEnabledProp ? config.dispatchConfigEnabledPropId : null,
-      missingRuleProp:
-        !!config.dispatchConfigRulePropId && !sawRuleProp ? config.dispatchConfigRulePropId : null,
-    });
-    throw new Error("Dispatch config properties are misconfigured; see logs for details.");
   }
 
   // eslint-disable-next-line no-console

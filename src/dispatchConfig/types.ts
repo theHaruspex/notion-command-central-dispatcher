@@ -16,6 +16,8 @@ export interface FanoutMapping {
   taskDatabaseId: string;
   taskObjectivePropId: string;
   objectiveTasksPropId: string;
+  conditionPropertyName?: string;
+  conditionValue?: string;
 }
 
 export interface DispatchConfigSnapshot {

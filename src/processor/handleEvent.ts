@@ -53,8 +53,10 @@ export async function handleEvent(event: AutomationEvent): Promise<ProcessorResu
     try {
       const page = await getPage(taskId);
       const parent = page.parent as any;
-      const originDatabaseId =
+      const normalizeDatabaseId = (id: string): string => id.replace(/-/g, "").toLowerCase();
+      const originDatabaseIdRaw =
         parent && typeof parent.database_id === "string" ? parent.database_id : null;
+      const originDatabaseId = originDatabaseIdRaw ? normalizeDatabaseId(originDatabaseIdRaw) : null;
       if (!originDatabaseId) {
         // eslint-disable-next-line no-console
         console.warn("[processor] skip task without database parent", { taskId });
@@ -62,19 +64,9 @@ export async function handleEvent(event: AutomationEvent): Promise<ProcessorResu
       }
 
       const properties = page.properties;
-      const statusProp = properties.Status as any;
-      let newStatusName = "Unknown";
-      if (statusProp && typeof statusProp === "object" && statusProp.type === "status") {
-        const status = (statusProp as any).status;
-        if (status && typeof status.name === "string" && status.name.trim().length > 0) {
-          newStatusName = status.name;
-        }
-      }
-
       const dispatchEvent: DispatchEvent = {
         originDatabaseId,
         originPageId: page.id,
-        newStatusName,
         properties,
       };
 

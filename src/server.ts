@@ -52,12 +52,14 @@ app.post("/webhook", async (req: Request, res: Response) => {
 
     const snapshot = await getDispatchConfigSnapshot();
 
+    const normalizeDatabaseId = (id: string): string => id.replace(/-/g, "").toLowerCase();
+    const originDatabaseIdKey = normalizeDatabaseId(normalized.originDatabaseId);
+
     // First, evaluate dispatch rules for the origin page.
     // If no rules match, we do not fan out or create any commands.
     const dispatchEvent: DispatchEvent = {
-      originDatabaseId: normalized.originDatabaseId,
+      originDatabaseId: originDatabaseIdKey,
       originPageId: normalized.originPageId,
-      newStatusName: normalized.newStatusName,
       properties: normalized.properties,
     };
 
@@ -71,7 +73,6 @@ app.post("/webhook", async (req: Request, res: Response) => {
       request_id: requestId,
       origin_database_id: normalized.originDatabaseId,
       origin_page_id: normalized.originPageId,
-      new_status_name: normalized.newStatusName,
       fanout_applied: fanoutApplied,
       objective_id: objectiveId,
       matched_routes: matchedRoutes.map((r) => r.routeName),
@@ -90,7 +91,7 @@ app.post("/webhook", async (req: Request, res: Response) => {
 
     // If at least one rule matched the origin, optionally fan out.
     const fanoutMapping = snapshot.fanoutMappings.find(
-      (m) => m.taskDatabaseId === normalized.originDatabaseId,
+      (m) => m.taskDatabaseId === originDatabaseIdKey,
     );
 
     if (fanoutMapping) {
@@ -116,7 +117,6 @@ app.post("/webhook", async (req: Request, res: Response) => {
         const fanoutEvent: AutomationEvent = {
           taskId: normalized.originPageId,
           objectiveId,
-          newStatus: normalized.newStatusName,
           objectiveTasksRelationPropIdOverride: fanoutMapping.objectiveTasksPropId,
         };
 

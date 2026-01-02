@@ -1,5 +1,3 @@
-export type StatusValue = string;
-
 export interface AutomationEvent {
   taskId: string;
   objectiveId: string;
@@ -13,7 +11,6 @@ export interface AutomationEvent {
    * enumerate tasks for fan-out. When absent, config.OBJECTIVE_TASKS_RELATION_PROP_ID is used.
    */
   objectiveTasksRelationPropIdOverride?: string;
-  newStatus: StatusValue;
 }
 
 export interface ProcessorResult {

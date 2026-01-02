@@ -1,7 +1,6 @@
 export interface NormalizedEvent {
   originDatabaseId: string;
   originPageId: string;
-  newStatusName: string;
   properties: Record<string, any>;
 }
 
@@ -40,18 +39,10 @@ export function normalizeWebhookEvent(payload: unknown): NormalizedEvent {
         })();
 
   const properties = asObject(data.properties);
-  const statusProp = asObject(properties.Status as unknown);
-  const status = (statusProp as any).status;
-
-  let newStatusName = "Unknown";
-  if (status && typeof status.name === "string" && status.name.trim().length > 0) {
-    newStatusName = status.name;
-  }
 
   return {
     originDatabaseId,
     originPageId,
-    newStatusName,
     properties,
   };
 }

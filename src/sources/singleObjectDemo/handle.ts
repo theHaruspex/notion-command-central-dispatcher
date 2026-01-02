@@ -22,7 +22,6 @@ export async function handleSingleObjectEvent(event: DispatchEvent, requestId: s
     request_id: requestId,
     origin_database_id: event.originDatabaseId,
     origin_page_id: event.originPageId,
-    new_status: event.newStatusName,
     matched_routes: matchedRouteNames,
   });
 

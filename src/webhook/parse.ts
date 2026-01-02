@@ -21,16 +21,15 @@ function getStringField(obj: RawBody, keys: string[], fieldDescription: string):
   throw new Error(`Missing or invalid ${fieldDescription} (expected non-empty string in one of: ${keys.join(", ")})`);
 }
 
-/**
- * Parse a Notion Automation webhook payload into our internal event type.
- * 
- * We intentionally support both snake_case and camelCase field names so the
- * Notion automation can be configured flexibly:
- * - trigger_task_id | taskId
- * - objective_id    | objectiveId
- * - trigger_key     | triggerKey
- * - new_status      | newStatus
- */
+  /**
+   * Parse a Notion Automation webhook payload into our internal event type.
+   *
+   * We intentionally support both snake_case and camelCase field names so the
+   * Notion automation can be configured flexibly:
+   * - trigger_task_id | taskId
+   * - objective_id    | objectiveId
+   * - trigger_key     | triggerKey
+   */
 export function parseAutomationWebhook(payload: unknown): AutomationEvent {
   const obj = asObject(payload);
 
@@ -38,12 +37,10 @@ export function parseAutomationWebhook(payload: unknown): AutomationEvent {
   if ("trigger_task_id" in obj || "taskId" in obj) {
     const taskId = getStringField(obj, ["trigger_task_id", "taskId"], "Task ID");
     const objectiveId = getStringField(obj, ["objective_id", "objectiveId"], "Objective ID");
-    const newStatus = getStringField(obj, ["new_status", "newStatus"], "Status");
 
     return {
       taskId,
       objectiveId,
-      newStatus,
     };
   }
 
@@ -68,12 +65,6 @@ export function parseAutomationWebhook(payload: unknown): AutomationEvent {
       throw new Error("Missing Objective relation id on properties.Objective.relation[0].id");
     })();
 
-  const statusProp = asObject(properties.Status as unknown);
-  const status = (statusProp as any).status;
-  let newStatus = "Unknown";
-  if (status && typeof status.name === "string" && status.name.trim().length > 0) {
-    newStatus = status.name;
-  }
 
   // Optional trigger key: only from explicit fields/properties; no automation IDs
   let triggerKey: string | undefined;
@@ -90,7 +81,6 @@ export function parseAutomationWebhook(payload: unknown): AutomationEvent {
     taskId,
     objectiveId,
     triggerKey,
-    newStatus,
   };
 }
 
