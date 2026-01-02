@@ -4,7 +4,6 @@ import { matchRoutes } from "./match";
 import type { DispatchEvent } from "./match";
 import { createCommand } from "./createCommand";
 import { enqueueObjectiveFanoutFromOrigin } from "./fanout";
-import type { AutomationEvent } from "../types";
 import type { WebhookEvent } from "../webhook/normalizeWebhook";
 
 const config = loadConfig();
@@ -84,6 +83,8 @@ export async function routeWebhookEvent(
       requestId,
       originTaskId: webhookEvent.originPageId,
       taskObjectivePropId: fanoutMapping.taskObjectivePropId,
+      objectiveTasksPropId: fanoutMapping.objectiveTasksPropId,
+      matchedRouteNames: matchedRoutes.map((r) => r.routeName),
     });
 
     fanoutApplied = true;

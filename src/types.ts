@@ -11,6 +11,11 @@ export interface AutomationEvent {
    * enumerate tasks for fan-out. When absent, config.OBJECTIVE_TASKS_RELATION_PROP_ID is used.
    */
   objectiveTasksRelationPropIdOverride?: string;
+  /**
+   * Names of the DispatchCommand rules that matched the origin webhook event.
+   * Fanout uses these to create one command per task per matched rule.
+   */
+  matchedRouteNames?: string[];
 }
 
 export interface ProcessorResult {
