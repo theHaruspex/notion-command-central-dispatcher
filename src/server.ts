@@ -2,7 +2,7 @@ import express, { Request, Response } from "express";
 import crypto from "crypto";
 import { loadConfig } from "./config";
 import { normalizeWebhookEvent } from "./webhook/normalizeWebhook";
-import { dispatchWebhookEvent } from "./dispatch";
+import { handleWebhookHttp } from "./webhook/handleHttp";
 
 const config = loadConfig();
 const app = express();
@@ -39,7 +39,7 @@ app.post("/webhook", async (req: Request, res: Response) => {
       return res.status(400).json({ ok: false, error: message, request_id: requestId });
     }
 
-    const result = await dispatchWebhookEvent({
+    const result = await handleWebhookHttp({
       requestId,
       normalizedEvent: normalized,
     });
