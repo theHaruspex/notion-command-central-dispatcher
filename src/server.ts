@@ -1,8 +1,8 @@
 import express, { Request, Response } from "express";
 import crypto from "crypto";
 import { loadConfig } from "./config";
-import { normalizeWebhookEvent } from "./webhook/normalizeWebhook";
-import { handleWebhookHttp } from "./webhook/handleHttp";
+import { handleWebhook } from "./webhook";
+import { WebhookAuthError, WebhookParseError } from "./webhook/errors";
 
 const config = loadConfig();
 const app = express();
@@ -22,30 +22,22 @@ app.post("/webhook", async (req: Request, res: Response) => {
       body: req.body,
     });
 
-    if (config.webhookSharedSecret) {
-      const headerSecret = req.header("x-webhook-secret");
-      if (!headerSecret || headerSecret !== config.webhookSharedSecret) {
-        return res.status(401).json({ ok: false, error: "Invalid webhook shared secret" });
-      }
-    }
-
-    let normalized;
-    try {
-      normalized = normalizeWebhookEvent(req.body);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Invalid webhook payload";
-      // eslint-disable-next-line no-console
-      console.error("[/webhook] parse error", { request_id: requestId, error: message });
-      return res.status(400).json({ ok: false, error: message, request_id: requestId });
-    }
-
-    const result = await handleWebhookHttp({
+    const result = await handleWebhook({
       requestId,
-      normalizedEvent: normalized,
+      headers: req.headers,
+      body: req.body,
     });
 
     return res.status(200).json(result);
   } catch (err) {
+    if (err instanceof WebhookAuthError) {
+      return res.status(401).json({ ok: false, error: "Invalid webhook shared secret" });
+    }
+    if (err instanceof WebhookParseError) {
+      return res
+        .status(400)
+        .json({ ok: false, error: err.message, request_id: requestId });
+    }
     // eslint-disable-next-line no-console
     console.error("[/webhook] unexpected_error", {
       error: err,

@@ -6,16 +6,16 @@ import { getObjectiveIdForTask } from "../notion/api";
 import { notionRequest } from "../notion/client";
 import { enqueueObjectiveEvent } from "./fanout";
 import type { AutomationEvent } from "../types";
-import type { NormalizedEvent } from "../webhook/normalizeWebhook";
+import type { WebhookEvent } from "../webhook/normalizeWebhook";
 
 const config = loadConfig();
 
-export interface DispatchWebhookArgs {
+export interface RouteWebhookArgs {
   requestId: string;
-  normalizedEvent: NormalizedEvent;
+  webhookEvent: WebhookEvent;
 }
 
-export interface DispatchWebhookResult {
+export interface RouteWebhookResult {
   ok: true;
   request_id: string;
   fanout_applied: boolean;
@@ -28,19 +28,19 @@ function normalizeDatabaseId(id: string): string {
   return id.replace(/-/g, "").toLowerCase();
 }
 
-export async function dispatchWebhookEvent(
-  args: DispatchWebhookArgs,
-): Promise<DispatchWebhookResult> {
-  const { requestId, normalizedEvent } = args;
+export async function routeWebhookEvent(
+  args: RouteWebhookArgs,
+): Promise<RouteWebhookResult> {
+  const { requestId, webhookEvent } = args;
 
   const snapshot = await getDispatchConfigSnapshot();
 
-  const originDatabaseIdKey = normalizeDatabaseId(normalizedEvent.originDatabaseId);
+  const originDatabaseIdKey = normalizeDatabaseId(webhookEvent.originDatabaseId);
 
   const dispatchEvent: DispatchEvent = {
     originDatabaseId: originDatabaseIdKey,
-    originPageId: normalizedEvent.originPageId,
-    properties: normalizedEvent.properties,
+    originPageId: webhookEvent.originPageId,
+    properties: webhookEvent.properties,
   };
 
   const matchedRoutes = matchRoutes(dispatchEvent, snapshot.routes);
@@ -51,8 +51,8 @@ export async function dispatchWebhookEvent(
   // eslint-disable-next-line no-console
   console.log("[/webhook] dispatch_routing_decision", {
     request_id: requestId,
-    origin_database_id: normalizedEvent.originDatabaseId,
-    origin_page_id: normalizedEvent.originPageId,
+    origin_database_id: webhookEvent.originDatabaseId,
+    origin_page_id: webhookEvent.originPageId,
     fanout_applied: fanoutApplied,
     objective_id: objectiveId,
     matched_routes: matchedRoutes.map((r) => r.routeName),
@@ -78,11 +78,11 @@ export async function dispatchWebhookEvent(
     // eslint-disable-next-line no-console
     console.log("[/webhook] fanout_mapping_matched", {
       request_id: requestId,
-      origin_database_id: normalizedEvent.originDatabaseId,
+      origin_database_id: webhookEvent.originDatabaseId,
     });
 
     objectiveId = await getObjectiveIdForTask(
-      normalizedEvent.originPageId,
+      webhookEvent.originPageId,
       fanoutMapping.taskObjectivePropId,
     );
 
@@ -95,7 +95,7 @@ export async function dispatchWebhookEvent(
       });
 
       const fanoutEvent: AutomationEvent = {
-        taskId: normalizedEvent.originPageId,
+        taskId: webhookEvent.originPageId,
         objectiveId,
         objectiveTasksRelationPropIdOverride: fanoutMapping.objectiveTasksPropId,
       };
@@ -132,7 +132,7 @@ export async function dispatchWebhookEvent(
         },
         properties: {
           [config.commandsTargetPagePropId]: {
-            relation: [{ id: normalizedEvent.originPageId }],
+            relation: [{ id: webhookEvent.originPageId }],
           },
           [config.commandsTriggerKeyPropId]: {
             rich_text: [

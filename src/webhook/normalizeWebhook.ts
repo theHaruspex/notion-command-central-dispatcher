@@ -1,4 +1,4 @@
-export interface NormalizedEvent {
+export interface WebhookEvent {
   originDatabaseId: string;
   originPageId: string;
   properties: Record<string, any>;
@@ -15,7 +15,7 @@ function asObject(payload: unknown): RawBody {
   return payload as RawBody;
 }
 
-export function normalizeWebhookEvent(payload: unknown): NormalizedEvent {
+export function normalizeWebhookEvent(payload: unknown): WebhookEvent {
   const obj = asObject(payload);
   const data = asObject(obj.data);
 
