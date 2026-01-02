@@ -2,11 +2,11 @@
   "name": "notion-command-central-dispatcher",
   "version": "1.0.0",
   "description": "Notion Command Central dispatcher and Objective fan-out integration (TypeScript, Express)",
-  "main": "dist/server.js",
+  "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "start": "node dist/index.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "print:db-props": "node scripts/print-db-props.js"
   },
   "engines": {
