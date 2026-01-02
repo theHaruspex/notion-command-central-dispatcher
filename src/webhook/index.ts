@@ -1,18 +1,24 @@
 import { loadConfig } from "../config";
 import { normalizeWebhookEvent } from "./normalizeWebhook";
-import { routeWebhookEvent } from "../dispatch";
-import type { RouteWebhookResult } from "../dispatch";
 import { WebhookAuthError, WebhookParseError } from "./errors";
+import type { WebhookEvent } from "./normalizeWebhook";
 
-export interface HandleWebhookArgs {
-  requestId: string;
+export interface AuthenticateAndNormalizeWebhookArgs {
   headers: Record<string, string | string[] | undefined>;
   body: unknown;
 }
 
-export async function handleWebhook(args: HandleWebhookArgs): Promise<RouteWebhookResult> {
+/**
+ * Webhook boundary: auth + normalization only.
+ *
+ * Important: this layer does NOT call dispatch. The process orchestrator decides
+ * whether/how to route events.
+ */
+export async function authenticateAndNormalizeWebhook(
+  args: AuthenticateAndNormalizeWebhookArgs,
+): Promise<WebhookEvent> {
   const config = loadConfig();
-  const { requestId, headers, body } = args;
+  const { headers, body } = args;
 
   if (config.webhookSharedSecret) {
     const headerSecret = headers["x-webhook-secret"];
@@ -22,7 +28,7 @@ export async function handleWebhook(args: HandleWebhookArgs): Promise<RouteWebho
     }
   }
 
-  let webhookEvent;
+  let webhookEvent: WebhookEvent;
   try {
     webhookEvent = normalizeWebhookEvent(body);
   } catch (err) {
@@ -30,10 +36,7 @@ export async function handleWebhook(args: HandleWebhookArgs): Promise<RouteWebho
     throw new WebhookParseError(message);
   }
 
-  return routeWebhookEvent({
-    requestId,
-    webhookEvent,
-  });
+  return webhookEvent;
 }
 
 
