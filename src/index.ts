@@ -3,7 +3,7 @@ import type { Request, Response } from "express";
 import { loadConfig } from "./config";
 import { createApp } from "./server";
 import { authenticateAndNormalizeWebhook } from "./webhook";
-import { routeWebhookEvent } from "./dispatch";
+import { routeWebhookEvent } from "./routing";
 import { WebhookAuthError, WebhookParseError } from "./webhook/errors";
 
 const config = loadConfig();
