@@ -14,7 +14,7 @@ const config = loadConfig();
  * Given a single automation event where the triggering task's new status is "Done",
  * enumerate all tasks under the objective and create one Command page per task.
  */
-export async function handleEvent(event: AutomationEvent): Promise<ProcessorResult> {
+export async function runObjectiveFanout(event: AutomationEvent): Promise<ProcessorResult> {
   const taskIds = await getObjectiveTaskIds(
     event.objectiveId,
     event.objectiveTasksRelationPropIdOverride,

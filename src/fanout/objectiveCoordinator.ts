@@ -1,5 +1,5 @@
 import type { AutomationEvent } from "../types";
-import { handleEvent } from "../processor/handleEvent";
+import { runObjectiveFanout } from "./runObjectiveFanout";
 
 type ObjectiveId = string;
 
@@ -25,7 +25,7 @@ async function runForObjective(objectiveId: ObjectiveId, event: AutomationEvent)
   console.log("[coordinator] run_started", { objectiveId });
 
   try {
-    await handleEvent(event);
+    await runObjectiveFanout(event);
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("[coordinator] run_failed", { objectiveId, error: err });
@@ -50,4 +50,5 @@ export function enqueueObjectiveEvent(event: AutomationEvent): void {
   state.inFlight = true;
   void runForObjective(objectiveId, event);
 }
+
 

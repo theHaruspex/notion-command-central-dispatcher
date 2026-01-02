@@ -4,7 +4,7 @@ import { matchRoutes } from "./match";
 import type { DispatchEvent } from "./match";
 import { getObjectiveIdForTask } from "../notion/api";
 import { notionRequest } from "../notion/client";
-import { enqueueObjectiveEvent } from "../coordinator/objectiveCoordinator";
+import { enqueueObjectiveEvent } from "../fanout/objectiveCoordinator";
 import type { AutomationEvent } from "../types";
 import type { NormalizedEvent } from "../sources/normalizeWebhook";
 
