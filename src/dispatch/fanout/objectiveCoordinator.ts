@@ -1,4 +1,4 @@
-import type { AutomationEvent } from "../types";
+import type { AutomationEvent } from "../../types";
 import { runObjectiveFanout } from "./runObjectiveFanout";
 
 type ObjectiveId = string;

@@ -1,10 +1,10 @@
-import type { AutomationEvent, ProcessorResult } from "../types";
-import { getObjectiveTaskIds, getPage } from "../notion/api";
-import { loadConfig } from "../config";
-import { getDispatchConfigSnapshot } from "../dispatch/config/cache";
-import { matchRoutes } from "../dispatch/match";
-import type { DispatchEvent } from "../dispatch/match";
-import { notionRequest } from "../notion/client";
+import type { AutomationEvent, ProcessorResult } from "../../types";
+import { getObjectiveTaskIds, getPage } from "../../notion/api";
+import { loadConfig } from "../../config";
+import { getDispatchConfigSnapshot } from "../config/cache";
+import { matchRoutes } from "../match";
+import type { DispatchEvent } from "../match";
+import { notionRequest } from "../../notion/client";
 
 const config = loadConfig();
 
