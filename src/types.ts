@@ -16,6 +16,11 @@ export interface AutomationEvent {
    * Fanout uses these to create one command per task per matched rule.
    */
   matchedRouteNames?: string[];
+  /**
+   * Fanout command marker name. Fanout will create one command per task with this title
+   * and (optionally) set Directive: Command to this value.
+   */
+  recomputeCommandName?: string;
 }
 
 export interface ProcessorResult {

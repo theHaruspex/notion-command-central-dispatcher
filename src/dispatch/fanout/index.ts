@@ -42,9 +42,9 @@ export async function enqueueObjectiveFanoutFromOrigin(args: {
   originTaskId: string;
   taskObjectivePropId: string;
   objectiveTasksPropId: string;
-  matchedRouteNames: string[];
+  recomputeCommandName: string;
 }): Promise<void> {
-  const { originTaskId, taskObjectivePropId, objectiveTasksPropId, matchedRouteNames } = args;
+  const { originTaskId, taskObjectivePropId, objectiveTasksPropId, recomputeCommandName } = args;
 
   const objectiveId = await getObjectiveIdForTask(originTaskId, taskObjectivePropId);
   if (!objectiveId) {
@@ -70,7 +70,7 @@ export async function enqueueObjectiveFanoutFromOrigin(args: {
     taskId: originTaskId,
     objectiveId,
     objectiveTasksRelationPropIdOverride: objectiveTasksPropId,
-    matchedRouteNames,
+    recomputeCommandName,
   };
 
   void runForObjective(objectiveId, event);

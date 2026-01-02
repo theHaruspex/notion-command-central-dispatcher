@@ -8,8 +8,8 @@ const config = loadConfig();
 /**
  * Fan-out processor.
  *
- * Semantics: when fanout is triggered, we enumerate all tasks under the objective and create
- * one Command per task per matched origin rule (but we do NOT re-run rule matching per task).
+ * Semantics (Option A): when fanout is triggered, we enumerate all tasks under the objective and create
+ * EXACTLY ONE "recompute" command per task (no per-task routing, no per-route expansion).
  */
 export async function runObjectiveFanout(event: AutomationEvent): Promise<ProcessorResult> {
   const triggerKey = config.commandTriggerKey ?? event.triggerKey;
@@ -29,7 +29,10 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
     throw new Error("COMMANDS_TRIGGER_KEY_PROP_ID is not configured");
   }
 
-  const routeNames = Array.isArray(event.matchedRouteNames) ? event.matchedRouteNames : [];
+  const recomputeCommandName =
+    typeof event.recomputeCommandName === "string" && event.recomputeCommandName
+      ? event.recomputeCommandName
+      : "FANOUT_RECOMPUTE_TASK";
 
   const taskIds = await getObjectiveTaskIds(event.objectiveId, event.objectiveTasksRelationPropIdOverride);
 
@@ -38,44 +41,42 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
     objectiveId: event.objectiveId,
     triggerKey,
     taskCount: taskIds.length,
-    routesCount: routeNames.length,
+    recomputeCommandName,
   });
 
   let created = 0;
   let failed = 0;
 
   for (const taskId of taskIds) {
-    for (const routeName of routeNames) {
+    // eslint-disable-next-line no-console
+    console.log("[processor] creating_fanout_recompute_command_for_task", {
+      objectiveId: event.objectiveId,
+      taskId,
+      recomputeCommandName,
+    });
+
+    try {
+      await createCommand({
+        commandsDbId: config.commandsDbId,
+        titlePropNameOrId: config.commandsCommandNamePropId,
+        commandTitle: recomputeCommandName,
+        triggerKeyPropId: config.commandsTriggerKeyPropId,
+        triggerKeyValue: triggerKey,
+        directiveCommandPropId: config.commandsDirectiveCommandPropId,
+        directiveCommandValues: config.commandsDirectiveCommandPropId ? [recomputeCommandName] : undefined,
+        targetRelationPropId: config.commandsTargetTaskPropId,
+        targetPageId: taskId,
+      });
+      created += 1;
+    } catch (err) {
+      failed += 1;
       // eslint-disable-next-line no-console
-      console.log("[processor] creating_dispatch_command_for_task", {
+      console.error("[processor] create_fanout_recompute_command_failed", {
         objectiveId: event.objectiveId,
         taskId,
-        routeName,
+        recomputeCommandName,
+        error: err,
       });
-
-      try {
-        await createCommand({
-          commandsDbId: config.commandsDbId,
-          titlePropNameOrId: config.commandsCommandNamePropId,
-          commandTitle: routeName,
-          triggerKeyPropId: config.commandsTriggerKeyPropId,
-          triggerKeyValue: triggerKey,
-          directiveCommandPropId: config.commandsDirectiveCommandPropId,
-          directiveCommandValues: config.commandsDirectiveCommandPropId ? [routeName] : undefined,
-          targetRelationPropId: config.commandsTargetTaskPropId,
-          targetPageId: taskId,
-        });
-        created += 1;
-      } catch (err) {
-        failed += 1;
-        // eslint-disable-next-line no-console
-        console.error("[processor] create_command_failed", {
-          objectiveId: event.objectiveId,
-          taskId,
-          routeName,
-          error: err,
-        });
-      }
     }
   }
 

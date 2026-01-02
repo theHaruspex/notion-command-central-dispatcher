@@ -4,6 +4,7 @@ import { loadConfig } from "./config";
 import { createApp } from "./server";
 import { authenticateAndNormalizeWebhook } from "./webhook";
 import { routeWebhookEvent } from "./routing";
+import { executeRoutePlan } from "./dispatch";
 import { WebhookAuthError, WebhookParseError } from "./webhook/errors";
 
 const config = loadConfig();
@@ -28,7 +29,8 @@ app.post("/webhook", async (req: Request, res: Response) => {
       body: req.body,
     });
 
-    const result = await routeWebhookEvent({ requestId, webhookEvent });
+    const plan = await routeWebhookEvent({ requestId, webhookEvent });
+    const result = await executeRoutePlan({ requestId, webhookEvent, plan });
 
     return res.status(200).json(result);
   } catch (err) {
