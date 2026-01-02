@@ -155,8 +155,8 @@ All logic for reading and using the Notion “Dispatch Config Demo” DB lives u
             - Rule does not match this event.
         - If all properties matched, log `[dispatch] dispatch_rule_matched` and include route.
 
-Webhook Normalization and Parsing
----------------------------------
+Webhook Normalization
+---------------------
 
 - src/sources/normalizeWebhook.ts
   - normalizeWebhookEvent(payload) → NormalizedEvent:
@@ -166,21 +166,6 @@ Webhook Normalization and Parsing
       - originDatabaseId from data.parent.database_id.
       - properties as the raw Notion properties object from data.properties.
     - Does not interpret Status or any particular property; leaves everything for Dispatch rules.
-
-- src/webhook/parse.ts
-  - Legacy/general AutomationEvent parser (used by some older paths, not by the new unified /webhook).
-  - parseAutomationWebhook(payload) → AutomationEvent:
-    - Path A (explicit JSON fields from automation):
-      - trigger_task_id | taskId (string).
-      - objective_id | objectiveId (string).
-      - Optional trigger_key.
-    - Path B (page payload fallback):
-      - data.id as taskId.
-      - properties.Objective.relation[0].id as objectiveId.
-      - Optional triggerKey from:
-        - top-level trigger_key, or
-        - properties["Trigger Key"].rich_text[0].plain_text.
-  - This parser no longer computes/uses newStatus; that coupling has been removed.
 
 Core Routing and Fanout
 -----------------------
@@ -298,20 +283,6 @@ Objective Coordinator and Fanout Processor
            - On success: increments created.
            - On error: increments failed and logs `[processor] create_command_failed`.
     7. Returns ProcessorResult { ok: failed === 0, created, failed }.
-
-Legacy / Demo Sources
----------------------
-
-- src/sources/singleObjectDemo/parseWebhook.ts
-  - A specialized parser for the original “Single Object Workflow Demo” webhook payload.
-  - Similar to normalizeWebhookEvent but scoped to that demo; produces a DispatchEvent-like object for that path.
-
-- src/sources/singleObjectDemo/handle.ts
-  - Legacy handler for the old `/webhook/single-object` endpoint.
-  - Uses getDispatchConfigSnapshot + matchRoutes to:
-    - Decide which routes match the single-object demo DB.
-    - Create commands pointing to the origin page (without Trigger Key or Directive: Command in the old version).
-  - This code is mostly superseded by the unified /webhook flow but still exists as a reference/demo.
 
 Types and Shared Interfaces
 ---------------------------
