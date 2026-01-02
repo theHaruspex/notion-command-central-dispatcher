@@ -6,7 +6,7 @@ import { getObjectiveIdForTask } from "../notion/api";
 import { notionRequest } from "../notion/client";
 import { enqueueObjectiveEvent } from "../fanout/objectiveCoordinator";
 import type { AutomationEvent } from "../types";
-import type { NormalizedEvent } from "../sources/normalizeWebhook";
+import type { NormalizedEvent } from "../webhook/normalizeWebhook";
 
 const config = loadConfig();
 

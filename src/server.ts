@@ -1,7 +1,7 @@
 import express, { Request, Response } from "express";
 import crypto from "crypto";
 import { loadConfig } from "./config";
-import { normalizeWebhookEvent } from "./sources/normalizeWebhook";
+import { normalizeWebhookEvent } from "./webhook/normalizeWebhook";
 import { dispatchWebhookEvent } from "./dispatch";
 
 const config = loadConfig();
