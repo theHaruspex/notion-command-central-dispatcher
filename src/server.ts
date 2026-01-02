@@ -136,6 +136,12 @@ app.post("/webhook", async (req: Request, res: Response) => {
       if (!config.commandsTargetPagePropId) {
         throw new Error("COMMANDS_TARGET_PAGE_PROP_ID is not configured");
       }
+      if (!config.commandsTriggerKeyPropId) {
+        throw new Error("COMMANDS_TRIGGER_KEY_PROP_ID is not configured");
+      }
+      if (!config.commandTriggerKey) {
+        throw new Error("COMMAND_TRIGGER_KEY is not configured");
+      }
 
       for (const route of matchedRoutes) {
         const title = route.routeName;
@@ -147,6 +153,15 @@ app.post("/webhook", async (req: Request, res: Response) => {
           properties: {
             [config.commandsTargetPagePropId]: {
               relation: [{ id: normalized.originPageId }],
+            },
+            [config.commandsTriggerKeyPropId]: {
+              rich_text: [
+                {
+                  text: {
+                    content: config.commandTriggerKey,
+                  },
+                },
+              ],
             },
           },
         };
