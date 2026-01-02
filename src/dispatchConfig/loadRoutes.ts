@@ -126,9 +126,9 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
       const conditionPropNameProp = props["Condition 1: Property Name"];
       const conditionPropertyName: string =
         conditionPropNameProp &&
-        conditionPropNameProp.type === "text" &&
-        Array.isArray(conditionPropNameProp.text)
-          ? conditionPropNameProp.text
+        conditionPropNameProp.type === "rich_text" &&
+        Array.isArray(conditionPropNameProp.rich_text)
+          ? conditionPropNameProp.rich_text
               .map((t: any) => t.plain_text || t.text?.content || "")
               .join("")
               .trim()
@@ -137,9 +137,9 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
       const conditionValueProp = props["Condition 1: Value"];
       const conditionValue: string =
         conditionValueProp &&
-        conditionValueProp.type === "text" &&
-        Array.isArray(conditionValueProp.text)
-          ? conditionValueProp.text
+        conditionValueProp.type === "rich_text" &&
+        Array.isArray(conditionValueProp.rich_text)
+          ? conditionValueProp.rich_text
               .map((t: any) => t.plain_text || t.text?.content || "")
               .join("")
               .trim()
