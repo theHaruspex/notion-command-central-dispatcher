@@ -1,7 +1,6 @@
 import express, { Request, Response } from "express";
 import crypto from "crypto";
 import { loadConfig } from "./config";
-import { handleDebugWebhook } from "./webhook/debug";
 import { normalizeWebhookEvent } from "./sources/normalizeWebhook";
 import { dispatchWebhookEvent } from "./dispatch";
 
@@ -12,10 +11,6 @@ app.use(express.json());
 
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ ok: true });
-});
-
-app.post("/webhook/debug", (req: Request, res: Response) => {
-  void handleDebugWebhook(req, res);
 });
 
 app.post("/webhook", async (req: Request, res: Response) => {
