@@ -1,5 +1,3 @@
-export type StatusValue = string;
-
 export interface AutomationEvent {
   taskId: string;
   objectiveId: string;
@@ -8,7 +6,11 @@ export interface AutomationEvent {
    * If absent, the processor may fall back to COMMAND_TRIGGER_KEY from config.
    */
   triggerKey?: string;
-  newStatus: StatusValue;
+  /**
+   * Optional override for the Objective's Tasks relation property id, used to
+   * enumerate tasks for fan-out. When absent, config.OBJECTIVE_TASKS_RELATION_PROP_ID is used.
+   */
+  objectiveTasksRelationPropIdOverride?: string;
 }
 
 export interface ProcessorResult {

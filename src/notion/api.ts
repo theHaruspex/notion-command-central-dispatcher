@@ -15,11 +15,11 @@ interface PagePropertyResponse {
   next_cursor?: string | null;
 }
 
-export async function getObjectiveTaskIds(objectiveId: string): Promise<string[]> {
-  if (!config.objectiveTasksRelationPropId) {
-    throw new Error("OBJECTIVE_TASKS_RELATION_PROP_ID is not configured");
+export async function getObjectiveTaskIds(objectiveId: string, tasksRelationPropId?: string): Promise<string[]> {
+  const relationPropId = tasksRelationPropId ?? config.objectiveTasksRelationPropId;
+  if (!relationPropId) {
+    throw new Error("Objective tasks relation property id is not configured");
   }
-
   const tasks: string[] = [];
   let cursor: string | undefined;
 
@@ -30,7 +30,7 @@ export async function getObjectiveTaskIds(objectiveId: string): Promise<string[]
       searchParams.set("start_cursor", cursor);
     }
 
-    const path = `/pages/${objectiveId}/properties/${config.objectiveTasksRelationPropId}?${searchParams.toString()}`;
+    const path = `/pages/${objectiveId}/properties/${relationPropId}?${searchParams.toString()}`;
     // eslint-disable-next-line no-console
     console.log("[notion:getObjectiveTaskIds] request", { objectiveId, path, cursor });
     const response = await notionRequest({ path, method: "GET" });
@@ -63,6 +63,67 @@ export async function getObjectiveTaskIds(objectiveId: string): Promise<string[]
   }
 
   return tasks;
+}
+
+export async function getObjectiveIdForTask(taskId: string, taskObjectivePropId: string): Promise<string | null> {
+  const path = `/pages/${taskId}/properties/${taskObjectivePropId}`;
+  // eslint-disable-next-line no-console
+  console.log("[notion:getObjectiveIdForTask] request", { taskId, path });
+
+  const response = await notionRequest({
+    path,
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to read task objective relation: ${response.status} ${text}`);
+  }
+
+  const data = (await response.json()) as any;
+
+  // Relation property items can appear under different shapes depending on the API:
+  // - GET /pages/{id}/properties/{prop}: { object: "property_item", type: "relation", relation: { id } }
+  // - Or batched: { results: [{ relation: [{ id }] }, ...] }
+  const tryExtract = (source: any): string | null => {
+    if (!source) return null;
+    const rel = (source as any).relation;
+    if (!rel) return null;
+
+    if (Array.isArray(rel) && rel.length > 0 && typeof rel[0].id === "string") {
+      return rel[0].id;
+    }
+
+    if (!Array.isArray(rel) && typeof rel.id === "string") {
+      return rel.id;
+    }
+    return null;
+  };
+
+  const direct = tryExtract(data) ?? tryExtract((data as any).property_item);
+  if (direct) return direct;
+
+  if (Array.isArray(data.results) && data.results.length > 0) {
+    for (const item of data.results) {
+      const id = tryExtract(item);
+      if (id) return id;
+    }
+  }
+
+  // eslint-disable-next-line no-console
+  console.log("[notion:getObjectiveIdForTask] no_relation_found", {
+    taskId,
+    taskObjectivePropId,
+    keys: Object.keys(data),
+    hasResultsArray: Array.isArray(data.results),
+    resultsLength: Array.isArray(data.results) ? data.results.length : undefined,
+    propertyItemType: (data as any).property_item?.type,
+    propertyItemPreview: (data as any).property_item
+      ? JSON.stringify((data as any).property_item).slice(0, 300)
+      : null,
+  });
+
+  return null;
 }
 
 export interface CommandInput {
@@ -117,6 +178,35 @@ export async function createCommand(input: CommandInput): Promise<void> {
     const text = await response.text();
     throw new Error(`Failed to create command page: ${response.status} ${text}`);
   }
+}
+
+export interface NotionPage {
+  id: string;
+  parent: { [key: string]: any };
+  properties: Record<string, any>;
+}
+
+export async function getPage(pageId: string): Promise<NotionPage> {
+  const path = `/pages/${pageId}`;
+  // eslint-disable-next-line no-console
+  console.log("[notion:getPage] request", { pageId, path });
+
+  const response = await notionRequest({
+    path,
+    method: "GET",
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to fetch page ${pageId}: ${response.status} ${text}`);
+  }
+
+  const data = (await response.json()) as any;
+  return {
+    id: data.id,
+    parent: data.parent || {},
+    properties: (data.properties as Record<string, any>) || {},
+  };
 }
 
 
