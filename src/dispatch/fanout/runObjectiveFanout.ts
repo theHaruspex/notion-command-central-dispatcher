@@ -1,7 +1,7 @@
 import type { AutomationEvent, ProcessorResult } from "../../types";
 import { getObjectiveTaskIds, getPage } from "../../notion/api";
 import { loadConfig } from "../../config";
-import { getDispatchConfigSnapshot } from "../config/cache";
+import { getDispatchConfigSnapshot } from "../configDatabase";
 import { matchRoutes } from "../match";
 import type { DispatchEvent } from "../match";
 import { notionRequest } from "../../notion/client";

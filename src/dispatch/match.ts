@@ -1,4 +1,4 @@
-import type { DispatchRoute } from "./config/types";
+import type { DispatchRoute } from "./configDatabase/types";
 
 export interface DispatchEvent {
   originDatabaseId: string;

@@ -1,5 +1,5 @@
 import { loadConfig } from "../config";
-import { getDispatchConfigSnapshot } from "./config/cache";
+import { getDispatchConfigSnapshot } from "./configDatabase";
 import { matchRoutes } from "./match";
 import type { DispatchEvent } from "./match";
 import { getObjectiveIdForTask } from "../notion/api";
