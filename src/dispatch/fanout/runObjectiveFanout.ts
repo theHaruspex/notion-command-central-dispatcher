@@ -1,25 +1,17 @@
 import type { AutomationEvent, ProcessorResult } from "../../types";
-import { getObjectiveTaskIds, getPage } from "../../notion/api";
 import { loadConfig } from "../../config";
-import { getDispatchConfigSnapshot } from "../configDatabase";
-import { matchRoutes } from "../match";
-import type { DispatchEvent } from "../match";
-import { notionRequest } from "../../notion/client";
+import { createCommand } from "../../commands/createCommand";
 
 const config = loadConfig();
 
 /**
  * Fan-out processor.
  *
- * Given a single automation event where the triggering task's new status is "Done",
- * enumerate all tasks under the objective and create one Command page per task.
+ * New semantics: when fanout is triggered, we emit a single objective-level recompute
+ * trigger command targeted at the origin task. Per-task routing is handled downstream
+ * in Command Central, not in this integration.
  */
 export async function runObjectiveFanout(event: AutomationEvent): Promise<ProcessorResult> {
-  const taskIds = await getObjectiveTaskIds(
-    event.objectiveId,
-    event.objectiveTasksRelationPropIdOverride,
-  );
-
   const triggerKey = config.commandTriggerKey ?? event.triggerKey;
   if (!triggerKey) {
     throw new Error(
@@ -37,113 +29,45 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
     throw new Error("COMMANDS_TRIGGER_KEY_PROP_ID is not configured");
   }
 
-  const snapshot = await getDispatchConfigSnapshot();
+  // eslint-disable-next-line no-console
+  console.log("[processor] starting_fanout_recompute_trigger", {
+    objectiveId: event.objectiveId,
+    originTaskId: event.taskId,
+  });
 
   let created = 0;
   let failed = 0;
 
-  // eslint-disable-next-line no-console
-  console.log("[processor] starting fan-out", {
-    objectiveId: event.objectiveId,
-    triggerKey,
-    taskCount: taskIds.length,
-  });
-
-  for (const taskId of taskIds) {
-    try {
-      const page = await getPage(taskId);
-      const parent = page.parent as any;
-      const normalizeDatabaseId = (id: string): string => id.replace(/-/g, "").toLowerCase();
-      const originDatabaseIdRaw =
-        parent && typeof parent.database_id === "string" ? parent.database_id : null;
-      const originDatabaseId = originDatabaseIdRaw ? normalizeDatabaseId(originDatabaseIdRaw) : null;
-      if (!originDatabaseId) {
-        // eslint-disable-next-line no-console
-        console.warn("[processor] skip task without database parent", { taskId });
-        continue;
-      }
-
-      const properties = page.properties;
-      const dispatchEvent: DispatchEvent = {
-        originDatabaseId,
-        originPageId: page.id,
-        properties,
-      };
-
-      const matchedRoutes = matchRoutes(dispatchEvent, snapshot.routes);
-      if (matchedRoutes.length === 0) {
-        // eslint-disable-next-line no-console
-        console.log("[processor] task_skipped_no_matching_routes", { taskId, originDatabaseId });
-        continue;
-      }
-
-      for (const route of matchedRoutes) {
-        const title = route.routeName;
-
-        const body: any = {
-          parent: {
-            database_id: config.commandsDbId,
-          },
-          properties: {
-            [config.commandsTargetTaskPropId]: {
-              relation: [{ id: taskId }],
-            },
-            [config.commandsTriggerKeyPropId]: {
-              rich_text: [
-                {
-                  text: {
-                    content: triggerKey,
-                  },
-                },
-              ],
-            },
-          },
-        };
-
-        if (config.commandsDirectiveCommandPropId) {
-          body.properties[config.commandsDirectiveCommandPropId] = {
-            multi_select: [
-              {
-                name: title,
-              },
-            ],
-          };
-        }
-
-        // eslint-disable-next-line no-console
-        console.log("[processor] creating_dispatch_command_for_task", {
-          objectiveId: event.objectiveId,
-          taskId,
-          routeName: title,
-        });
-
-        const response = await notionRequest({
-          path: "/pages",
-          method: "POST",
-          body,
-        });
-
-        if (!response.ok) {
-          const text = await response.text();
-          failed += 1;
-          // eslint-disable-next-line no-console
-          console.error("[processor] create_command_failed", {
-            objectiveId: event.objectiveId,
-            taskId,
-            routeName: title,
-            status: response.status,
-            body: text,
-          });
-        } else {
-          created += 1;
-        }
-      }
-    } catch (err) {
-      failed += 1;
-      // eslint-disable-next-line no-console
-      console.error("[processor] task_processing_failed", { taskId, error: err });
-    }
+  try {
+    await createCommand({
+      commandsDbId: config.commandsDbId,
+      titlePropNameOrId: config.commandsCommandNamePropId ?? "Name",
+      commandTitle: "FANOUT_RECOMPUTE_OBJECTIVE",
+      triggerKeyPropId: config.commandsTriggerKeyPropId,
+      triggerKeyValue: triggerKey,
+      directiveCommandPropId: config.commandsDirectiveCommandPropId,
+      directiveCommandValues: ["FANOUT_RECOMPUTE_OBJECTIVE"],
+      targetRelationPropId: config.commandsTargetTaskPropId,
+      targetPageId: event.taskId,
+    });
+    created = 1;
+  } catch (err) {
+    failed = 1;
+    // eslint-disable-next-line no-console
+    console.error("[processor] fanout_recompute_command_failed", {
+      objectiveId: event.objectiveId,
+      originTaskId: event.taskId,
+      error: err,
+    });
   }
+
+  // eslint-disable-next-line no-console
+  console.log("[processor] completed_fanout_recompute_trigger", {
+    objectiveId: event.objectiveId,
+    originTaskId: event.taskId,
+    created,
+    failed,
+  });
 
   return {
     ok: failed === 0,

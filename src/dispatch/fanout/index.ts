@@ -1,5 +1,6 @@
 import type { AutomationEvent } from "../../types";
 import { runObjectiveFanout } from "./runObjectiveFanout";
+import { getObjectiveIdForTask } from "../../notion/api";
 
 type ObjectiveId = string;
 
@@ -25,7 +26,7 @@ async function runForObjective(objectiveId: ObjectiveId, event: AutomationEvent)
   console.log("[coordinator] run_started", { objectiveId });
 
   try {
-    await runObjectiveFanout(event);
+    await runObjectiveFanout({ ...event, objectiveId });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("[coordinator] run_failed", { objectiveId, error: err });
@@ -36,18 +37,38 @@ async function runForObjective(objectiveId: ObjectiveId, event: AutomationEvent)
   }
 }
 
-export function enqueueObjectiveEvent(event: AutomationEvent): void {
-  const objectiveId = event.objectiveId;
+export async function enqueueObjectiveFanoutFromOrigin(args: {
+  requestId: string;
+  originTaskId: string;
+  taskObjectivePropId: string;
+}): Promise<void> {
+  const { originTaskId, taskObjectivePropId } = args;
+
+  const objectiveId = await getObjectiveIdForTask(originTaskId, taskObjectivePropId);
+  if (!objectiveId) {
+    // eslint-disable-next-line no-console
+    console.warn("[fanout] objective_not_found_for_task", {
+      originTaskId,
+      taskObjectivePropId,
+    });
+    return;
+  }
+
   const state = getState(objectiveId);
 
   if (state.inFlight) {
-    // We already have a run in progress for this objective; drop this event.
     // eslint-disable-next-line no-console
     console.log("[coordinator] objective_run_skipped_in_flight", { objectiveId });
     return;
   }
 
   state.inFlight = true;
+
+  const event: AutomationEvent = {
+    taskId: originTaskId,
+    objectiveId,
+  };
+
   void runForObjective(objectiveId, event);
 }
 

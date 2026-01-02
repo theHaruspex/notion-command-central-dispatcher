@@ -2,9 +2,8 @@ import { loadConfig } from "../config";
 import { getDispatchConfigSnapshot } from "./configDatabase";
 import { matchRoutes } from "./match";
 import type { DispatchEvent } from "./match";
-import { getObjectiveIdForTask } from "../notion/api";
-import { notionRequest } from "../notion/client";
-import { enqueueObjectiveEvent } from "./fanout";
+import { createCommand } from "../commands/createCommand";
+import { enqueueObjectiveFanoutFromOrigin } from "./fanout";
 import type { AutomationEvent } from "../types";
 import type { WebhookEvent } from "../webhook/normalizeWebhook";
 
@@ -81,27 +80,13 @@ export async function routeWebhookEvent(
       origin_database_id: webhookEvent.originDatabaseId,
     });
 
-    objectiveId = await getObjectiveIdForTask(
-      webhookEvent.originPageId,
-      fanoutMapping.taskObjectivePropId,
-    );
+    await enqueueObjectiveFanoutFromOrigin({
+      requestId,
+      originTaskId: webhookEvent.originPageId,
+      taskObjectivePropId: fanoutMapping.taskObjectivePropId,
+    });
 
-    if (objectiveId) {
-      fanoutApplied = true;
-      // eslint-disable-next-line no-console
-      console.log("[/webhook] fanout_started", {
-        request_id: requestId,
-        objective_id: objectiveId,
-      });
-
-      const fanoutEvent: AutomationEvent = {
-        taskId: webhookEvent.originPageId,
-        objectiveId,
-        objectiveTasksRelationPropIdOverride: fanoutMapping.objectiveTasksPropId,
-      };
-
-      enqueueObjectiveEvent(fanoutEvent);
-    }
+    fanoutApplied = true;
   }
 
   // Command creation for matched routes (single-object path only).
@@ -126,83 +111,33 @@ export async function routeWebhookEvent(
     for (const route of matchedRoutes) {
       const title = route.routeName;
 
-      const body: any = {
-        parent: {
-          database_id: config.commandsDbId,
-        },
-        properties: {
-          [config.commandsTargetPagePropId]: {
-            relation: [{ id: webhookEvent.originPageId }],
-          },
-          [config.commandsTriggerKeyPropId]: {
-            rich_text: [
-              {
-                text: {
-                  content: config.commandTriggerKey,
-                },
-              },
-            ],
-          },
-        },
-      };
-
-      if (config.commandsDirectiveCommandPropId) {
-        body.properties[config.commandsDirectiveCommandPropId] = {
-          multi_select: [
-            {
-              name: title,
-            },
-          ],
-        };
-      }
-
-      if (config.commandsCommandNamePropId) {
-        body.properties[config.commandsCommandNamePropId] = {
-          title: [
-            {
-              text: {
-                content: title,
-              },
-            },
-          ],
-        };
-      } else {
-        body.properties.Name = {
-          title: [
-            {
-              text: {
-                content: title,
-              },
-            },
-          ],
-        };
-      }
-
       // eslint-disable-next-line no-console
       console.log("[/webhook] creating_dispatch_command", {
         request_id: requestId,
         routeName: title,
         directive_command_prop_key: config.commandsDirectiveCommandPropId,
-        property_keys: Object.keys(body.properties),
       });
 
-      const response = await notionRequest({
-        path: "/pages",
-        method: "POST",
-        body,
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
+      try {
+        await createCommand({
+          commandsDbId: config.commandsDbId,
+          titlePropNameOrId: config.commandsCommandNamePropId || "Name",
+          commandTitle: title,
+          triggerKeyPropId: config.commandsTriggerKeyPropId,
+          triggerKeyValue: config.commandTriggerKey,
+          directiveCommandPropId: config.commandsDirectiveCommandPropId || undefined,
+          directiveCommandValues: config.commandsDirectiveCommandPropId ? [title] : undefined,
+          targetRelationPropId: config.commandsTargetPagePropId,
+          targetPageId: webhookEvent.originPageId,
+        });
+        commandsCreated += 1;
+      } catch (err) {
         // eslint-disable-next-line no-console
         console.error("[/webhook] create_command_failed", {
           request_id: requestId,
           routeName: title,
-          status: response.status,
-          body: text,
+          error: err,
         });
-      } else {
-        commandsCreated += 1;
       }
     }
   }
@@ -211,7 +146,7 @@ export async function routeWebhookEvent(
     ok: true,
     request_id: requestId,
     fanout_applied: fanoutApplied,
-    objective_id: objectiveId,
+    objective_id: null,
     matched_routes: matchedRoutes.map((r) => r.routeName),
     commands_created: commandsCreated,
   };
