@@ -1,7 +1,7 @@
 import { loadConfig } from "../config";
-import { getDispatchConfigSnapshot } from "../dispatch/configDatabase";
-import { matchRoutes } from "../dispatch/match";
-import type { DispatchEvent } from "../dispatch/match";
+import { getDispatchConfigSnapshot } from "./configDatabase";
+import { matchRoutes } from "./match";
+import type { DispatchEvent } from "./match";
 import { createCommand } from "../dispatch/createCommand";
 import { enqueueObjectiveFanoutFromOrigin } from "../dispatch/fanout";
 import type { WebhookEvent } from "../webhook/normalizeWebhook";
