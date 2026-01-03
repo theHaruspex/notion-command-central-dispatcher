@@ -35,7 +35,7 @@ export async function executeRoutePlan(args: {
 
   if (plan.kind === "fanout") {
     // eslint-disable-next-line no-console
-    console.log("[/webhook] fanout_mapping_matched", {
+    console.log("[dispatch] fanout_plan_executing", {
       request_id: requestId,
       origin_database_id: webhookEvent.originDatabaseId,
     });
@@ -76,7 +76,7 @@ export async function executeRoutePlan(args: {
 
   for (const routeName of plan.matchedRouteNames) {
     // eslint-disable-next-line no-console
-    console.log("[/webhook] creating_dispatch_command", {
+    console.log("[dispatch] creating_origin_command", {
       request_id: requestId,
       routeName,
       directive_command_prop_key: config.commandsDirectiveCommandPropId,
@@ -97,7 +97,7 @@ export async function executeRoutePlan(args: {
       commandsCreated += 1;
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.error("[/webhook] create_command_failed", {
+      console.error("[dispatch] create_origin_command_failed", {
         request_id: requestId,
         routeName,
         error: err,

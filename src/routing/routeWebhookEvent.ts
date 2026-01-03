@@ -35,7 +35,7 @@ export async function routeWebhookEvent(
   const matchedRouteNames = matchedRoutes.map((r) => r.routeName);
 
   // eslint-disable-next-line no-console
-  console.log("[/webhook] dispatch_routing_decision", {
+  console.log("[routing] route_plan_created", {
     request_id: requestId,
     origin_database_id: webhookEvent.originDatabaseId,
     origin_page_id: webhookEvent.originPageId,

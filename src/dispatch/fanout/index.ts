@@ -23,17 +23,17 @@ async function runForObjective(objectiveId: ObjectiveId, event: AutomationEvent)
   const state = getState(objectiveId);
 
   // eslint-disable-next-line no-console
-  console.log("[coordinator] run_started", { objectiveId });
+  console.log("[fanout] run_started", { objectiveId });
 
   try {
     await runObjectiveFanout({ ...event, objectiveId });
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error("[coordinator] run_failed", { objectiveId, error: err });
+    console.error("[fanout] run_failed", { objectiveId, error: err });
   } finally {
     state.inFlight = false;
     // eslint-disable-next-line no-console
-    console.log("[coordinator] run_completed", { objectiveId });
+    console.log("[fanout] run_completed", { objectiveId });
   }
 }
 
@@ -60,7 +60,7 @@ export async function enqueueObjectiveFanoutFromOrigin(args: {
 
   if (state.inFlight) {
     // eslint-disable-next-line no-console
-    console.log("[coordinator] objective_run_skipped_in_flight", { objectiveId });
+    console.log("[fanout] objective_run_skipped_in_flight", { objectiveId });
     return;
   }
 

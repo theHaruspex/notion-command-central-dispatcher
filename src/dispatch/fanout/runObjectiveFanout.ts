@@ -37,7 +37,7 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
   const taskIds = await getObjectiveTaskIds(event.objectiveId, event.objectiveTasksRelationPropIdOverride);
 
   // eslint-disable-next-line no-console
-  console.log("[processor] starting fan-out", {
+  console.log("[fanout] starting", {
     objectiveId: event.objectiveId,
     triggerKey,
     taskCount: taskIds.length,
@@ -49,7 +49,7 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
 
   for (const taskId of taskIds) {
     // eslint-disable-next-line no-console
-    console.log("[processor] creating_fanout_recompute_command_for_task", {
+    console.log("[fanout] creating_recompute_command_for_task", {
       objectiveId: event.objectiveId,
       taskId,
       recomputeCommandName,
@@ -71,7 +71,7 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
     } catch (err) {
       failed += 1;
       // eslint-disable-next-line no-console
-      console.error("[processor] create_fanout_recompute_command_failed", {
+      console.error("[fanout] create_recompute_command_failed", {
         objectiveId: event.objectiveId,
         taskId,
         recomputeCommandName,

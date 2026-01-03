@@ -75,7 +75,7 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
   let cursor: string | null | undefined;
 
   // eslint-disable-next-line no-console
-  console.log("[dispatch] config_cache_refresh_started", {
+  console.log("[routing:config] config_cache_refresh_started", {
     dispatchConfigDbId: config.dispatchConfigDbId,
   });
 
@@ -95,7 +95,7 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
     if (!response.ok) {
       const text = await response.text();
       // eslint-disable-next-line no-console
-      console.error("[dispatch] config_cache_refresh_failed", {
+      console.error("[routing:config] config_cache_refresh_failed", {
         status: response.status,
         body: text,
       });
@@ -154,7 +154,7 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
       const enabled = extractCheckboxByKey(props, config.dispatchConfigEnabledPropId);
 
       // eslint-disable-next-line no-console
-      console.log("[dispatch] config_row_evaluated", {
+      console.log("[routing:config] config_row_evaluated", {
         page_id: page.id,
         title,
         enabled,
@@ -165,7 +165,7 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
       });
 
       // eslint-disable-next-line no-console
-      console.log("[dispatch] config_row_properties", {
+      console.log("[routing:config] config_row_properties", {
         page_id: page.id,
         properties: props,
       });
@@ -174,7 +174,7 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
 
       if (!originDatabaseId || !ruleType) {
         // eslint-disable-next-line no-console
-        console.error("[dispatch] config_row_invalid", {
+        console.error("[routing:config] config_row_invalid", {
           page_id: page.id,
           title,
           originDatabaseId,
@@ -219,7 +219,7 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
 
         if (!taskObjectivePropId || !objectiveTasksPropId) {
           // eslint-disable-next-line no-console
-          console.error("[dispatch] fanout_config_row_invalid", {
+          console.error("[routing:config] fanout_config_row_invalid", {
             page_id: page.id,
             title,
             originDatabaseId,
@@ -250,7 +250,7 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
 
   if (!hasPages) {
     // eslint-disable-next-line no-console
-    console.warn("[dispatch] config_db_empty", {
+    console.warn("[routing:config] config_db_empty", {
       dispatchConfigDbId: config.dispatchConfigDbId,
     });
   }
