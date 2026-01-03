@@ -13,14 +13,9 @@ export interface AutomationEvent {
   objectiveTasksRelationPropIdOverride?: string;
   /**
    * Names of the DispatchCommand rules that matched the origin webhook event.
-   * Fanout uses these to create one command per task per matched rule.
+   * Fanout uses these for labeling only (one command per task, not per route).
    */
   matchedRouteNames?: string[];
-  /**
-   * Fanout command marker name. Fanout will create one command per task with this title
-   * and (optionally) set Directive: Command to this value.
-   */
-  recomputeCommandName?: string;
 }
 
 export interface ProcessorResult {

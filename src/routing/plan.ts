@@ -18,7 +18,6 @@ export type RoutePlan =
       originTaskId: string;
       taskObjectivePropId: string;
       objectiveTasksPropId: string;
-      recomputeCommandName: string;
     };
 
 

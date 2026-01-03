@@ -9,7 +9,9 @@ const config = loadConfig();
  * Fan-out processor.
  *
  * Semantics (Option A): when fanout is triggered, we enumerate all tasks under the objective and create
- * EXACTLY ONE "recompute" command per task (no per-task routing, no per-route expansion).
+ * EXACTLY ONE fanout command per task (no per-task routing, no per-route expansion).
+ *
+ * Labeling: `Directive: Command` should contain the origin event’s matched route name(s).
  */
 export async function runObjectiveFanout(event: AutomationEvent): Promise<ProcessorResult> {
   const triggerKey = config.commandTriggerKey ?? event.triggerKey;
@@ -29,10 +31,9 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
     throw new Error("COMMANDS_TRIGGER_KEY_PROP_ID is not configured");
   }
 
-  const recomputeCommandName =
-    typeof event.recomputeCommandName === "string" && event.recomputeCommandName
-      ? event.recomputeCommandName
-      : "FANOUT_RECOMPUTE_TASK";
+  const matchedRouteNames = Array.isArray(event.matchedRouteNames) ? event.matchedRouteNames : [];
+  const titleFromRoutes =
+    matchedRouteNames.length > 0 ? matchedRouteNames.join(" | ").slice(0, 200) : "Fanout";
 
   const taskIds = await getObjectiveTaskIds(event.objectiveId, event.objectiveTasksRelationPropIdOverride);
 
@@ -41,7 +42,7 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
     objectiveId: event.objectiveId,
     triggerKey,
     taskCount: taskIds.length,
-    recomputeCommandName,
+    matchedRouteNamesCount: matchedRouteNames.length,
   });
 
   let created = 0;
@@ -52,18 +53,18 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
     console.log("[fanout] creating_recompute_command_for_task", {
       objectiveId: event.objectiveId,
       taskId,
-      recomputeCommandName,
+      title: titleFromRoutes,
     });
 
     try {
       await createCommand({
         commandsDbId: config.commandsDbId,
         titlePropNameOrId: config.commandsCommandNamePropId,
-        commandTitle: recomputeCommandName,
+        commandTitle: titleFromRoutes,
         triggerKeyPropId: config.commandsTriggerKeyPropId,
         triggerKeyValue: triggerKey,
         directiveCommandPropId: config.commandsDirectiveCommandPropId,
-        directiveCommandValues: config.commandsDirectiveCommandPropId ? [recomputeCommandName] : undefined,
+        directiveCommandValues: config.commandsDirectiveCommandPropId ? matchedRouteNames : undefined,
         targetRelationPropId: config.commandsTargetTaskPropId,
         targetPageId: taskId,
       });
@@ -71,10 +72,10 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
     } catch (err) {
       failed += 1;
       // eslint-disable-next-line no-console
-      console.error("[fanout] create_recompute_command_failed", {
+      console.error("[fanout] create_fanout_command_failed", {
         objectiveId: event.objectiveId,
         taskId,
-        recomputeCommandName,
+        title: titleFromRoutes,
         error: err,
       });
     }

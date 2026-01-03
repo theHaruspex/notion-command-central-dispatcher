@@ -45,7 +45,7 @@ export async function executeRoutePlan(args: {
       originTaskId: plan.originTaskId,
       taskObjectivePropId: plan.taskObjectivePropId,
       objectiveTasksPropId: plan.objectiveTasksPropId,
-      recomputeCommandName: plan.recomputeCommandName,
+      matchedRouteNames: plan.matchedRouteNames,
     });
 
     return {

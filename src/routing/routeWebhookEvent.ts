@@ -64,7 +64,6 @@ export async function routeWebhookEvent(
       originTaskId: webhookEvent.originPageId,
       taskObjectivePropId: fanoutMapping.taskObjectivePropId,
       objectiveTasksPropId: fanoutMapping.objectiveTasksPropId,
-      recomputeCommandName: "FANOUT_RECOMPUTE_TASK",
     };
   }
 
