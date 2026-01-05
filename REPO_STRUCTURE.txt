@@ -79,7 +79,6 @@ Core Configuration & Types
        - `dispatchConfigEnabledPropId`
        - `dispatchConfigRulePropId`
      - Other:
-       - `objectiveTasksRelationPropId`
        - `webhookSharedSecret`
        - `commandTriggerKey`
 
@@ -88,7 +87,7 @@ Core Configuration & Types
      - `taskId`: origin task ID (used for fanout).
      - `objectiveId`: resolved Objective page ID for the fanout run.
      - `triggerKey?`: optional override of trigger key (normally from env).
-     - `objectiveTasksRelationPropIdOverride?`: optional override for Objective → Tasks relation.
+     - `objectiveTasksPropId`: required Objective → Tasks relation property id for fanout enumeration (from routing/config mapping).
    - `ProcessorResult`:
      - `{ ok: boolean; created: number; failed: number }` – summary for fanout runs.
 
@@ -343,7 +342,7 @@ Core Configuration
        - `taskId`: origin task for the fanout job.
        - `objectiveId`: the objective page to fan out over.
        - `triggerKey?`: optional override for trigger key (usually env is used).
-       - `objectiveTasksRelationPropIdOverride?`: optional property override for Objective → Tasks relation.
+       - `objectiveTasksPropId`: required Objective → Tasks relation property id used to enumerate tasks for fanout (from routing/config mapping).
      - `ProcessorResult`:
        - `{ ok: boolean; created: number; failed: number }` – summary of fanout runs.
 
@@ -376,7 +375,7 @@ Dispatch Layer (Application Brain)
           - If an objective is found:
             - Logs `fanout_started`.
             - Builds `AutomationEvent`:
-              - `{ taskId: originPageId, objectiveId, objectiveTasksRelationPropIdOverride: objectiveTasksPropId }`.
+              - `{ taskId: originPageId, objectiveId, objectiveTasksPropId }`.
             - Calls `fanout.enqueueObjectiveEvent(event)` (delegated to fanout subsystem).
             - Marks `fanout_applied = true`.
      6. Single-object command creation:
@@ -504,14 +503,18 @@ Notion Client Layer
 
 10. `src/notion/api.ts`
    - Higher-level helpers built on `notionRequest`:
-     - `getObjectiveTaskIds(objectiveId, objectiveTasksRelationPropIdOverride?)`:
-       - Enumerates all Task IDs under an Objective using the relation property, handling Notion pagination.
-     - `getObjectiveIdForTask(taskId, taskObjectivePropId)`:
-       - Reads the Objective relation from a Task’s properties, supporting both property-item and direct relation shapes.
      - `getPage(pageId)`:
        - Fetches a full Notion page and returns its `id`, `parent`, and `properties`.
+     - `queryDatabase(databaseId, { startCursor?, body? })`:
+       - Calls `/databases/{databaseId}/query` and returns raw JSON.
+     - `createPage({ parentDatabaseId, properties })`:
+       - Calls `POST /pages` to create a page in a database.
+     - `getRelationIdsFromPageProperty(pageId, propId)`:
+       - Paginates `/pages/{pageId}/properties/{propId}` and returns relation page ids.
+     - `getSingleRelationIdFromPageProperty(pageId, propId)`:
+       - Returns the first relation page id or null.
 
-Summary
+   Summary
 -------
 
 - `server.ts` is a pure HTTP transport that delegates to `webhook/handleHttp.ts`.

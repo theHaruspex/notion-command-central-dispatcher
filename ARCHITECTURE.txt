@@ -269,7 +269,7 @@ src/dispatch/fanout/index.ts
   - Enforce single-flight per objective:
     - if inFlight, log skip and drop the event.
   - Fire-and-forget background run:
-    - `runObjectiveFanout({ taskId, objectiveId, objectiveTasksRelationPropIdOverride, matchedRouteNames })`
+    - `runObjectiveFanout({ taskId, objectiveId, objectiveTasksPropId, matchedRouteNames })`
 
 src/dispatch/fanout/runObjectiveFanout.ts
   Role: Fanout executor.

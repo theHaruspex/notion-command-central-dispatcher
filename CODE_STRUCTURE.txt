@@ -252,8 +252,8 @@ Objective Coordinator and Fanout Processor
 
 - src/processor/handleEvent.ts
   - Core Objective fan-out logic driven by Dispatch rules:
-    1. Given AutomationEvent { taskId, objectiveId, objectiveTasksRelationPropIdOverride?, triggerKey? }:
-       - Resolves tasks under the objective via getObjectiveTaskIds(objectiveId, override?).
+    1. Given AutomationEvent { taskId, objectiveId, objectiveTasksPropId, triggerKey? }:
+       - Resolves tasks under the objective via getRelationIdsFromPageProperty(objectiveId, objectiveTasksPropId).
     2. Resolves triggerKey:
        - Uses COMMAND_TRIGGER_KEY env (config.commandTriggerKey) or event.triggerKey.
     3. Validates commands* env:
@@ -293,7 +293,7 @@ Types and Shared Interfaces
       - taskId: originating task triggering the fan-out.
       - objectiveId: Objective to fan out across.
       - triggerKey?: optional per-event override; usually use COMMAND_TRIGGER_KEY instead.
-      - objectiveTasksRelationPropIdOverride?: optional override for the Objective → Tasks property id; if not set, the config default is used.
+      - objectiveTasksPropId: required Objective → Tasks property id used to enumerate tasks for fanout (from routing/config mapping).
   - ProcessorResult
     - { ok: boolean; created: number; failed: number } – used by the coordinator to summarize fan-out runs.
 

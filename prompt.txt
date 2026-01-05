@@ -79,9 +79,6 @@ Commands database:
 	•	COMMANDS_TARGET_TASK_PROP_ID=...  (relation property id in Commands DB)
 	•	COMMANDS_TRIGGER_KEY_PROP_ID=...  (text/rich_text property id in Commands DB)
 
-Objective tasks relation:
-	•	OBJECTIVE_TASKS_RELATION_PROP_ID=... (property id of the Objective’s “Tasks” relation property)
-
 Webhook security (optional but recommended):
 	•	WEBHOOK_SHARED_SECRET=...
 
@@ -126,15 +123,6 @@ Headers for every request:
 	•	Authorization: Bearer ${NOTION_TOKEN}
 	•	Notion-Version: ${NOTION_VERSION}
 	•	Content-Type: application/json
-
-A) Enumerate all tasks under an objective (pagination-safe)
-Use “Retrieve page property item” for the Objective’s Tasks relation property:
-
-GET /pages/{objective_id}/properties/{OBJECTIVE_TASKS_RELATION_PROP_ID}
-
-Handle pagination using start_cursor until has_more is false.
-
-Expected response includes results, where each result contains a relation item with an id (page id). Extract all task page ids into an array.
 
 B) Create a command page in Commands DB
 Use “Create a page”:

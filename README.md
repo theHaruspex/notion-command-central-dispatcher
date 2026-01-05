@@ -27,9 +27,6 @@ COMMANDS_DB_ID=your-commands-db-id
 COMMANDS_TARGET_TASK_PROP_ID=relation-prop-id-for-target-task
 COMMANDS_TRIGGER_KEY_PROP_ID=rich-text-prop-id-for-trigger-key
 
-# Objective → Tasks relation
-OBJECTIVE_TASKS_RELATION_PROP_ID=objective-tasks-relation-prop-id
-
 # Optional shared secret for webhook validation
 WEBHOOK_SHARED_SECRET=replace-with-random-string
 
