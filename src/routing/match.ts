@@ -1,4 +1,4 @@
-import type { DispatchRoute } from "./types";
+import type { DispatchRoute } from "./configDatabase/types";
 
 export interface DispatchEvent {
   originDatabaseId: string;
@@ -48,7 +48,7 @@ export function matchRoutes(event: DispatchEvent, routes: DispatchRoute[]): Disp
     if (!pred) {
       matched.push(route);
       // eslint-disable-next-line no-console
-      console.log("[dispatch] dispatch_rule_matched", {
+      console.log("[routing:match] dispatch_rule_matched", {
         routeName: route.routeName,
         originDatabaseId: event.originDatabaseId,
         originPageId: event.originPageId,
@@ -74,7 +74,7 @@ export function matchRoutes(event: DispatchEvent, routes: DispatchRoute[]): Disp
       if (!matches) {
         allMatched = false;
         // eslint-disable-next-line no-console
-        console.log("[dispatch] dispatch_rule_mismatch", {
+        console.log("[routing:match] dispatch_rule_mismatch", {
           routeName: route.routeName,
           originDatabaseId: event.originDatabaseId,
           originPageId: event.originPageId,
@@ -92,7 +92,7 @@ export function matchRoutes(event: DispatchEvent, routes: DispatchRoute[]): Disp
 
     matched.push(route);
     // eslint-disable-next-line no-console
-    console.log("[dispatch] dispatch_rule_matched", {
+    console.log("[routing:match] dispatch_rule_matched", {
       routeName: route.routeName,
       originDatabaseId: event.originDatabaseId,
       originPageId: event.originPageId,
@@ -101,4 +101,5 @@ export function matchRoutes(event: DispatchEvent, routes: DispatchRoute[]): Disp
 
   return matched;
 }
+
 

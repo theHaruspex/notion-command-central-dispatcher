@@ -1,6 +1,8 @@
 import type { DispatchConfigSnapshot } from "./types";
 import { loadDispatchConfig } from "./loadRoutes";
 
+export type { DispatchConfigSnapshot, DispatchRoute, FanoutMapping } from "./types";
+
 const TTL_MS = 60_000;
 
 let cachedSnapshot: DispatchConfigSnapshot | null = null;
@@ -32,13 +34,14 @@ export async function getDispatchConfigSnapshot(): Promise<DispatchConfigSnapsho
   // Stale-while-refresh: if TTL expired and no refresh in progress, kick off a refresh
   if (now - lastLoadedAt > TTL_MS && !refreshPromise) {
     // eslint-disable-next-line no-console
-    console.log("[dispatch] config_cache_refresh_started_async");
+    console.log("[routing:config] config_cache_refresh_started_async");
     refreshPromise = refreshCache().catch((err) => {
       // eslint-disable-next-line no-console
-      console.error("[dispatch] config_cache_refresh_failed", { error: err });
+      console.error("[routing:config] config_cache_refresh_failed", { error: err });
     });
   }
 
   return cachedSnapshot;
 }
+
 
