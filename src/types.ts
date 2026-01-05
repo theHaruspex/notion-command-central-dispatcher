@@ -7,10 +7,10 @@ export interface AutomationEvent {
    */
   triggerKey?: string;
   /**
-   * Optional override for the Objective's Tasks relation property id, used to
-   * enumerate tasks for fan-out. When absent, config.OBJECTIVE_TASKS_RELATION_PROP_ID is used.
+   * Objective → Tasks relation property id used to enumerate tasks for fanout.
+   * Sourced from the routing/config database fanout mapping and required for fanout execution.
    */
-  objectiveTasksRelationPropIdOverride?: string;
+  objectiveTasksPropId: string;
   /**
    * Names of the DispatchCommand rules that matched the origin webhook event.
    * Fanout uses these for labeling only (one command per task, not per route).

@@ -35,9 +35,11 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
   const titleFromRoutes =
     matchedRouteNames.length > 0 ? matchedRouteNames.join(" | ").slice(0, 200) : "Fanout";
 
-  const objectiveTasksPropId = event.objectiveTasksRelationPropIdOverride;
+  const objectiveTasksPropId = event.objectiveTasksPropId;
   if (!objectiveTasksPropId) {
-    throw new Error("Missing objectiveTasksPropId (objectiveTasksRelationPropIdOverride) on fanout event");
+    throw new Error(
+      "Malformed fanout job: missing objectiveTasksPropId. This value must be populated from the routing/config fanout mapping.",
+    );
   }
 
   const taskIds = await getRelationIdsFromPageProperty(event.objectiveId, objectiveTasksPropId);

@@ -69,7 +69,7 @@ export async function enqueueObjectiveFanoutFromOrigin(args: {
   const event: AutomationEvent = {
     taskId: originTaskId,
     objectiveId,
-    objectiveTasksRelationPropIdOverride: objectiveTasksPropId,
+    objectiveTasksPropId,
     matchedRouteNames,
   };
 
