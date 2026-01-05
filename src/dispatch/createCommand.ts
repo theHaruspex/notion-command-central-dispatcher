@@ -1,4 +1,4 @@
-import { notionRequest } from "../notion/client";
+import { createPage } from "../notion/api";
 
 export interface CreateCommandArgs {
   commandsDbId: string;
@@ -58,23 +58,10 @@ export async function createCommand(args: CreateCommandArgs): Promise<void> {
     ],
   };
 
-  const body = {
-    parent: {
-      database_id: commandsDbId,
-    },
+  await createPage({
+    parentDatabaseId: commandsDbId,
     properties,
-  };
-
-  const response = await notionRequest({
-    path: "/pages",
-    method: "POST",
-    body,
   });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Failed to create command: ${response.status} ${text}`);
-  }
 }
 
 

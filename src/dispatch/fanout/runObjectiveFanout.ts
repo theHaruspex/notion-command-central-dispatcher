@@ -1,5 +1,5 @@
 import type { AutomationEvent, ProcessorResult } from "../../types";
-import { getObjectiveTaskIds } from "../../notion/api";
+import { getRelationIdsFromPageProperty } from "../../notion/api";
 import { loadConfig } from "../../config";
 import { createCommand } from "../createCommand";
 
@@ -35,7 +35,12 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
   const titleFromRoutes =
     matchedRouteNames.length > 0 ? matchedRouteNames.join(" | ").slice(0, 200) : "Fanout";
 
-  const taskIds = await getObjectiveTaskIds(event.objectiveId, event.objectiveTasksRelationPropIdOverride);
+  const objectiveTasksPropId = event.objectiveTasksRelationPropIdOverride;
+  if (!objectiveTasksPropId) {
+    throw new Error("Missing objectiveTasksPropId (objectiveTasksRelationPropIdOverride) on fanout event");
+  }
+
+  const taskIds = await getRelationIdsFromPageProperty(event.objectiveId, objectiveTasksPropId);
 
   // eslint-disable-next-line no-console
   console.log("[fanout] starting", {

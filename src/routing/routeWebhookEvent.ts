@@ -1,19 +1,13 @@
-import { loadConfig } from "../config";
 import { getDispatchConfigSnapshot } from "./configDatabase";
 import { matchRoutes } from "./match";
 import type { DispatchEvent } from "./match";
 import type { WebhookEvent } from "../webhook/normalizeWebhook";
 import type { RoutePlan } from "./plan";
-
-const config = loadConfig();
+import { normalizeNotionId } from "../notion/utils";
 
 export interface RouteWebhookArgs {
   requestId: string;
   webhookEvent: WebhookEvent;
-}
-
-function normalizeDatabaseId(id: string): string {
-  return id.replace(/-/g, "").toLowerCase();
 }
 
 export async function routeWebhookEvent(
@@ -23,7 +17,7 @@ export async function routeWebhookEvent(
 
   const snapshot = await getDispatchConfigSnapshot();
 
-  const originDatabaseIdKey = normalizeDatabaseId(webhookEvent.originDatabaseId);
+  const originDatabaseIdKey = normalizeNotionId(webhookEvent.originDatabaseId);
 
   const dispatchEvent: DispatchEvent = {
     originDatabaseId: originDatabaseIdKey,

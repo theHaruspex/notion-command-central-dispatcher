@@ -1,6 +1,6 @@
 import type { AutomationEvent } from "../../types";
 import { runObjectiveFanout } from "./runObjectiveFanout";
-import { getObjectiveIdForTask } from "../../notion/api";
+import { getSingleRelationIdFromPageProperty } from "../../notion/api";
 
 type ObjectiveId = string;
 
@@ -46,7 +46,7 @@ export async function enqueueObjectiveFanoutFromOrigin(args: {
 }): Promise<void> {
   const { originTaskId, taskObjectivePropId, objectiveTasksPropId, matchedRouteNames } = args;
 
-  const objectiveId = await getObjectiveIdForTask(originTaskId, taskObjectivePropId);
+  const objectiveId = await getSingleRelationIdFromPageProperty(originTaskId, taskObjectivePropId);
   if (!objectiveId) {
     // eslint-disable-next-line no-console
     console.warn("[fanout] objective_not_found_for_task", {

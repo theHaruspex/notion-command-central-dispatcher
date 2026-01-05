@@ -1,5 +1,6 @@
 import { loadConfig } from "../../config";
-import { notionRequest } from "../../notion/client";
+import { queryDatabase } from "../../notion/api";
+import { normalizeNotionId } from "../../notion/utils";
 import type {
   DispatchConfigSnapshot,
   DispatchRoute,
@@ -18,10 +19,6 @@ interface QueryResponse {
   results: NotionPage[];
   has_more?: boolean;
   next_cursor?: string | null;
-}
-
-function normalizeDatabaseId(id: string): string {
-  return id.replace(/-/g, "").toLowerCase();
 }
 
 function extractTitle(props: Record<string, any>): string {
@@ -81,28 +78,19 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const body: any = {};
-    if (cursor) {
-      body.start_cursor = cursor;
-    }
-
-    const response = await notionRequest({
-      path: `/databases/${config.dispatchConfigDbId}/query`,
-      method: "POST",
-      body,
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
+    let data: QueryResponse;
+    try {
+      data = (await queryDatabase(config.dispatchConfigDbId, {
+        startCursor: cursor ?? null,
+      })) as QueryResponse;
+    } catch (err) {
       // eslint-disable-next-line no-console
       console.error("[routing:config] config_cache_refresh_failed", {
-        status: response.status,
-        body: text,
+        dispatchConfigDbId: config.dispatchConfigDbId,
+        error: err,
       });
-      throw new Error(`Failed to query dispatch config: ${response.status} ${text}`);
+      throw err;
     }
-
-    const data = (await response.json()) as QueryResponse;
     for (const page of data.results) {
       hasPages = true;
 
@@ -116,7 +104,7 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
               .join("")
               .trim()
           : "";
-      const originDatabaseId = originDatabaseIdRaw ? normalizeDatabaseId(originDatabaseIdRaw) : "";
+      const originDatabaseId = originDatabaseIdRaw ? normalizeNotionId(originDatabaseIdRaw) : "";
 
       const ruleTypeProp = props["Rule Tyoe"];
       const ruleType: string | null =
