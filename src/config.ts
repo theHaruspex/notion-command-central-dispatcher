@@ -6,6 +6,7 @@ export interface AppConfig {
   port: number;
   notionTokens: string[];
   notionVersion: string;
+  maxFanoutTasks: number;
   commandsDbId: string | null;
   commandsTargetTaskPropId: string | null;
   commandsTriggerKeyPropId: string | null;
@@ -47,10 +48,17 @@ export function loadConfig(): AppConfig {
     notionTokensFromEnv.length > 0 ? notionTokensFromEnv : [requireEnv("NOTION_TOKEN")];
   const notionVersion = process.env.NOTION_VERSION ?? "2022-06-28";
 
+  const maxFanoutTasksRaw = process.env.MAX_FANOUT_TASKS ?? "200";
+  const maxFanoutTasks = Number(maxFanoutTasksRaw);
+  if (!Number.isFinite(maxFanoutTasks) || maxFanoutTasks <= 0) {
+    throw new Error(`Invalid MAX_FANOUT_TASKS value: ${maxFanoutTasksRaw}`);
+  }
+
   return {
     port,
     notionTokens,
     notionVersion,
+    maxFanoutTasks,
     commandsDbId: process.env.COMMANDS_DB_ID ?? null,
     commandsTargetTaskPropId: process.env.COMMANDS_TARGET_TASK_PROP_ID ?? null,
     commandsTriggerKeyPropId: process.env.COMMANDS_TRIGGER_KEY_PROP_ID ?? null,
