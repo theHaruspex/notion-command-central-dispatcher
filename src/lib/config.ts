@@ -2,10 +2,8 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-export interface AppConfig {
-  port: number;
+export interface DispatchConfig {
   notionTokens: string[];
-  notionVersion: string;
   maxFanoutTasks: number;
   commandsDbId: string | null;
   commandsTargetTaskPropId: string | null;
@@ -13,11 +11,22 @@ export interface AppConfig {
   commandsTargetPagePropId: string | null;
   commandsCommandNamePropId: string | null;
   commandsDirectiveCommandPropId: string | null;
-  webhookSharedSecret: string | null;
   commandTriggerKey: string | null;
   dispatchConfigDbId: string | null;
   dispatchConfigEnabledPropId: string | null;
   dispatchConfigRulePropId: string | null;
+}
+
+export interface EventsConfig {
+  notionTokens: string[];
+}
+
+export interface AppConfig {
+  port: number;
+  notionVersion: string;
+  webhookSharedSecret: string | null;
+  dispatch: DispatchConfig;
+  events: EventsConfig;
 }
 
 function requireEnv(name: string): string {
@@ -43,9 +52,15 @@ export function loadConfig(): AppConfig {
     throw new Error(`Invalid PORT value: ${portRaw}`);
   }
 
-  const notionTokensFromEnv = parseCommaSeparatedList(process.env.NOTION_TOKENS);
-  const notionTokens =
-    notionTokensFromEnv.length > 0 ? notionTokensFromEnv : [requireEnv("NOTION_TOKEN")];
+  const baseTokens = parseCommaSeparatedList(process.env.NOTION_TOKENS);
+  const fallbackTokens = baseTokens.length > 0 ? baseTokens : [requireEnv("NOTION_TOKEN")];
+
+  const dispatchTokensEnv = parseCommaSeparatedList(process.env.DISPATCH_NOTION_TOKENS);
+  const eventsTokensEnv = parseCommaSeparatedList(process.env.EVENTS_NOTION_TOKENS);
+
+  const dispatchTokens = dispatchTokensEnv.length > 0 ? dispatchTokensEnv : fallbackTokens;
+  const eventsTokens = eventsTokensEnv.length > 0 ? eventsTokensEnv : fallbackTokens;
+
   const notionVersion = process.env.NOTION_VERSION ?? "2022-06-28";
 
   const maxFanoutTasksRaw = process.env.MAX_FANOUT_TASKS ?? "200";
@@ -56,20 +71,25 @@ export function loadConfig(): AppConfig {
 
   return {
     port,
-    notionTokens,
     notionVersion,
-    maxFanoutTasks,
-    commandsDbId: process.env.COMMANDS_DB_ID ?? null,
-    commandsTargetTaskPropId: process.env.COMMANDS_TARGET_TASK_PROP_ID ?? null,
-    commandsTriggerKeyPropId: process.env.COMMANDS_TRIGGER_KEY_PROP_ID ?? null,
-    commandsTargetPagePropId: process.env.COMMANDS_TARGET_PAGE_PROP_ID ?? null,
-    commandsCommandNamePropId: process.env.COMMANDS_COMMAND_NAME_PROP_ID ?? null,
-    commandsDirectiveCommandPropId: process.env.COMMANDS_DIRECTIVE_COMMAND_PROP_ID ?? null,
     webhookSharedSecret: process.env.WEBHOOK_SHARED_SECRET ?? null,
-    commandTriggerKey: process.env.COMMAND_TRIGGER_KEY ?? null,
-    dispatchConfigDbId: process.env.DISPATCH_CONFIG_DB_ID ?? null,
-    dispatchConfigEnabledPropId: process.env.DISPATCH_CONFIG_ENABLED_PROP_ID ?? null,
-    dispatchConfigRulePropId: process.env.DISPATCH_CONFIG_RULE_PROP_ID ?? null,
+    dispatch: {
+      notionTokens: dispatchTokens,
+      maxFanoutTasks,
+      commandsDbId: process.env.COMMANDS_DB_ID ?? null,
+      commandsTargetTaskPropId: process.env.COMMANDS_TARGET_TASK_PROP_ID ?? null,
+      commandsTriggerKeyPropId: process.env.COMMANDS_TRIGGER_KEY_PROP_ID ?? null,
+      commandsTargetPagePropId: process.env.COMMANDS_TARGET_PAGE_PROP_ID ?? null,
+      commandsCommandNamePropId: process.env.COMMANDS_COMMAND_NAME_PROP_ID ?? null,
+      commandsDirectiveCommandPropId: process.env.COMMANDS_DIRECTIVE_COMMAND_PROP_ID ?? null,
+      commandTriggerKey: process.env.COMMAND_TRIGGER_KEY ?? null,
+      dispatchConfigDbId: process.env.DISPATCH_CONFIG_DB_ID ?? null,
+      dispatchConfigEnabledPropId: process.env.DISPATCH_CONFIG_ENABLED_PROP_ID ?? null,
+      dispatchConfigRulePropId: process.env.DISPATCH_CONFIG_RULE_PROP_ID ?? null,
+    },
+    events: {
+      notionTokens: eventsTokens,
+    },
   };
 }
 

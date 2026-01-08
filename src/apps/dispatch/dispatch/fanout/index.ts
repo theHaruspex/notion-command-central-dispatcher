@@ -1,6 +1,6 @@
 import type { AutomationEvent } from "../../../../types";
 import { runObjectiveFanout } from "./runObjectiveFanout";
-import { getSingleRelationIdFromPageProperty } from "../../../../lib/notion/api";
+import { getSingleRelationIdFromPageProperty } from "../../notion";
 
 type ObjectiveId = string;
 
@@ -19,21 +19,21 @@ function getState(objectiveId: ObjectiveId): ObjectiveState {
   return state;
 }
 
-async function runForObjective(objectiveId: ObjectiveId, event: AutomationEvent): Promise<void> {
+async function runForObjective(objectiveId: ObjectiveId, requestId: string, event: AutomationEvent): Promise<void> {
   const state = getState(objectiveId);
 
   // eslint-disable-next-line no-console
-  console.log("[fanout] run_started", { objectiveId });
+  console.log("[fanout] run_started", { request_id: requestId, objectiveId });
 
   try {
-    await runObjectiveFanout({ ...event, objectiveId });
+    await runObjectiveFanout({ requestId, event: { ...event, objectiveId } });
   } catch (err) {
     // eslint-disable-next-line no-console
-    console.error("[fanout] run_failed", { objectiveId, error: err });
+    console.error("[fanout] run_failed", { request_id: requestId, objectiveId, error: err });
   } finally {
     state.inFlight = false;
     // eslint-disable-next-line no-console
-    console.log("[fanout] run_completed", { objectiveId });
+    console.log("[fanout] run_completed", { request_id: requestId, objectiveId });
   }
 }
 
@@ -44,12 +44,13 @@ export async function enqueueObjectiveFanoutFromOrigin(args: {
   objectiveTasksPropId: string;
   matchedRouteNames: string[];
 }): Promise<void> {
-  const { originTaskId, taskObjectivePropId, objectiveTasksPropId, matchedRouteNames } = args;
+  const { requestId, originTaskId, taskObjectivePropId, objectiveTasksPropId, matchedRouteNames } = args;
 
   const objectiveId = await getSingleRelationIdFromPageProperty(originTaskId, taskObjectivePropId);
   if (!objectiveId) {
     // eslint-disable-next-line no-console
     console.warn("[fanout] objective_not_found_for_task", {
+      request_id: requestId,
       originTaskId,
       taskObjectivePropId,
     });
@@ -60,7 +61,7 @@ export async function enqueueObjectiveFanoutFromOrigin(args: {
 
   if (state.inFlight) {
     // eslint-disable-next-line no-console
-    console.log("[fanout] objective_run_skipped_in_flight", { objectiveId });
+    console.log("[fanout] objective_run_skipped_in_flight", { request_id: requestId, objectiveId });
     return;
   }
 
@@ -73,7 +74,7 @@ export async function enqueueObjectiveFanoutFromOrigin(args: {
     matchedRouteNames,
   };
 
-  void runForObjective(objectiveId, event);
+  void runForObjective(objectiveId, requestId, event);
 }
 
 export { runObjectiveFanout } from "./runObjectiveFanout";

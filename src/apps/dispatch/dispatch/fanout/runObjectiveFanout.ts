@@ -1,9 +1,9 @@
 import type { AutomationEvent, ProcessorResult } from "../../../../types";
-import { getRelationIdsFromPageProperty } from "../../../../lib/notion/api";
+import { getRelationIdsFromPageProperty } from "../../notion";
 import { loadConfig } from "../../../../lib/config";
 import { createCommand } from "../createCommand";
 
-const config = loadConfig();
+const config = loadConfig().dispatch;
 
 /**
  * Fan-out processor.
@@ -13,7 +13,8 @@ const config = loadConfig();
  *
  * Labeling: `Directive: Command` should contain the origin event’s matched route name(s).
  */
-export async function runObjectiveFanout(event: AutomationEvent): Promise<ProcessorResult> {
+export async function runObjectiveFanout(args: { requestId: string; event: AutomationEvent }): Promise<ProcessorResult> {
+  const { requestId, event } = args;
   const triggerKey = config.commandTriggerKey ?? event.triggerKey;
   if (!triggerKey) {
     throw new Error(
@@ -50,6 +51,7 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
   if (taskIds.length > config.maxFanoutTasks) {
     // eslint-disable-next-line no-console
     console.warn("[fanout] task_count_exceeds_cap", {
+      request_id: requestId,
       objectiveId: event.objectiveId,
       originalTaskCount: taskIds.length,
       maxFanoutTasks: config.maxFanoutTasks,
@@ -60,6 +62,7 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
 
   // eslint-disable-next-line no-console
   console.log("[fanout] starting", {
+    request_id: requestId,
     objectiveId: event.objectiveId,
     triggerKey,
     taskCount: taskIdsToProcess.length,
@@ -71,6 +74,7 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
   const promises = taskIdsToProcess.map(async (taskId) => {
     // eslint-disable-next-line no-console
     console.log("[fanout] creating_recompute_command_for_task", {
+      request_id: requestId,
       objectiveId: event.objectiveId,
       taskId,
       title: titleFromRoutes,
@@ -98,6 +102,7 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
     const taskId = taskIdsToProcess[idx];
     // eslint-disable-next-line no-console
     console.error("[fanout] create_fanout_command_failed", {
+      request_id: requestId,
       objectiveId: event.objectiveId,
       taskId,
       title: titleFromRoutes,
@@ -107,6 +112,7 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
 
   // eslint-disable-next-line no-console
   console.log("[fanout] batch_completed", {
+    request_id: requestId,
     objectiveId: event.objectiveId,
     taskCountProcessed: taskIdsToProcess.length,
     created,

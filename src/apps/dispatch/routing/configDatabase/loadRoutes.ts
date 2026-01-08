@@ -1,5 +1,5 @@
 import { loadConfig } from "../../../../lib/config";
-import { queryDatabase } from "../../../../lib/notion/api";
+import { queryDatabase } from "../../notion";
 import { normalizeNotionId } from "../../../../lib/notion/utils";
 import type {
   DispatchConfigSnapshot,
@@ -8,7 +8,7 @@ import type {
   DispatchPredicate,
 } from "./types";
 
-const config = loadConfig();
+const config = loadConfig().dispatch;
 
 interface NotionPage {
   id: string;

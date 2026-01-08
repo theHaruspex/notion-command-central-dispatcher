@@ -4,7 +4,7 @@ import type { RoutePlan } from "../routing/plan";
 import { createCommand } from "./createCommand";
 import { enqueueObjectiveFanoutFromOrigin } from "./fanout";
 
-const config = loadConfig();
+const config = loadConfig().dispatch;
 
 export interface RouteWebhookResult {
   ok: true;

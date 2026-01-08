@@ -1,34 +1,37 @@
-import { loadConfig } from "../config";
 import { createNotionClient, type NotionRequestOptions } from "./client";
 
-let clients: Array<ReturnType<typeof createNotionClient>> | null = null;
-let cursor = 0;
-let loggedStartup = false;
-
-function getClients(): Array<ReturnType<typeof createNotionClient>> {
-  if (clients) return clients;
-
-  const config = loadConfig();
-  clients = config.notionTokens.map((token) => createNotionClient({ token, notionVersion: config.notionVersion }));
-
-  if (!loggedStartup) {
-    loggedStartup = true;
-    // eslint-disable-next-line no-console
-    console.log("[notion:pool] initialized", { poolSize: clients.length });
-  }
-
-  return clients;
+export interface NotionClientPool {
+  request(options: NotionRequestOptions): Promise<Response>;
 }
 
-export async function notionRequest(options: NotionRequestOptions): Promise<Response> {
-  const pool = getClients();
-  const idx = cursor % pool.length;
-  cursor += 1;
+export function createNotionClientPool(args: {
+  name: string;
+  tokens: string[];
+  notionVersion: string;
+}): NotionClientPool {
+  const { name, tokens, notionVersion } = args;
+
+  if (!Array.isArray(tokens) || tokens.length === 0) {
+    throw new Error(`Notion client pool '${name}' must be initialized with at least one token`);
+  }
+
+  const clients = tokens.map((token) => createNotionClient({ token, notionVersion }));
+  let cursor = 0;
 
   // eslint-disable-next-line no-console
-  console.log("[notion:pool] selected_client", { idx, poolSize: pool.length });
+  console.log("[notion:pool] initialized", { name, poolSize: clients.length });
 
-  return pool[idx].request(options);
+  return {
+    async request(options: NotionRequestOptions): Promise<Response> {
+      const idx = cursor % clients.length;
+      cursor += 1;
+
+      // eslint-disable-next-line no-console
+      console.log("[notion:pool] selected_client", { name, idx, poolSize: clients.length });
+
+      return clients[idx].request(options);
+    },
+  };
 }
 
 

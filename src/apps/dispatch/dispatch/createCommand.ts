@@ -1,4 +1,4 @@
-import { createPage } from "../../../lib/notion/api";
+import { createPage } from "../notion";
 
 export interface CreateCommandArgs {
   commandsDbId: string;
