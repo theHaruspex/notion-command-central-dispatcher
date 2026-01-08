@@ -73,7 +73,7 @@ export async function handleEventsWebhook(args: {
   await createPage({
     parentDatabaseId: cfg.eventsDbId,
     properties: {
-      "Event UID": { title: [{ text: { content: eventUid } }] },
+      title: { title: [{ type: "text", text: { content: eventUid } }] },
       "Event Kind": { select: { name: "state_change" } },
       "Event Time": { date: { start: eventTimeIso } },
       "Received At": { date: { start: receivedAtIso } },
@@ -83,7 +83,7 @@ export async function handleEventsWebhook(args: {
       "Origin Database Name": rt(row.originDatabaseName),
       "Origin Page ID": rt(webhookEvent.originPageId),
       "Origin Page Name": rt(originPageName),
-      "Origin Page URL": webhookEvent.originPageUrl ?? "",
+      "Origin Page URL": { url: webhookEvent.originPageUrl ?? null },
       "State Property Name": rt(row.statePropertyName),
       "State Value": rt(stateValue),
       Attempt: { number: webhookEvent.attempt ?? 1 },
