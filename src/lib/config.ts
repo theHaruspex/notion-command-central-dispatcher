@@ -55,13 +55,24 @@ export function loadConfig(): AppConfig {
   }
 
   const baseTokens = parseCommaSeparatedList(process.env.NOTION_TOKENS);
-  const fallbackTokens = baseTokens.length > 0 ? baseTokens : [requireEnv("NOTION_TOKEN")];
 
   const dispatchTokensEnv = parseCommaSeparatedList(process.env.DISPATCH_NOTION_TOKENS);
   const eventsTokensEnv = parseCommaSeparatedList(process.env.EVENTS_NOTION_TOKENS);
 
-  const dispatchTokens = dispatchTokensEnv.length > 0 ? dispatchTokensEnv : fallbackTokens;
-  const eventsTokens = eventsTokensEnv.length > 0 ? eventsTokensEnv : fallbackTokens;
+  const dispatchTokens = dispatchTokensEnv.length > 0 ? dispatchTokensEnv : baseTokens;
+  const eventsTokens = eventsTokensEnv.length > 0 ? eventsTokensEnv : baseTokens;
+
+  if (dispatchTokens.length === 0) {
+    throw new Error(
+      "Missing Notion tokens for dispatch: set DISPATCH_NOTION_TOKENS (preferred) or NOTION_TOKENS",
+    );
+  }
+
+  if (eventsTokens.length === 0) {
+    throw new Error(
+      "Missing Notion tokens for events: set EVENTS_NOTION_TOKENS (preferred) or NOTION_TOKENS",
+    );
+  }
 
   const notionVersion = process.env.NOTION_VERSION ?? "2022-06-28";
 
