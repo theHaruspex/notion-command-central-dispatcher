@@ -1,0 +1,142 @@
+
+Build an “observability” module and thread it through the repo
+
+Context / intent
+	•	We’re adding observability for this Notion integration so we can identify bottlenecks (queueing, rate limiting, retries) and attribute API cost to the semantic operation that triggered it.
+	•	Observability is a first-class module under src/observability, not inside notion/.
+	•	We are NOT doing BaseContext right now. Only “ctx” scoped to a workflow run (requestId etc.).
+	•	We want an instantiable Notion client so we can later create a dedicated stress-test client without touching the main pipeline.
+
+Definition of done
+A) New module: src/observability/
+	1.	Add src/observability/records.ts
+
+	•	Define a single “record” shape for everything emitted (logs + telemetry).
+	•	Must include:
+	•	ts (ISO string or unix ms), level (debug/info/warn/error), kind (“log” | “telemetry”)
+	•	msg (string)
+	•	ctx (object) containing: requestId (required whenever available), component?, operation?, meta?
+	•	data (object) for event-specific fields (durations, status codes, etc.)
+	•	Keep it minimal and JSON-serializable.
+
+	2.	Add src/observability/sinks.ts
+
+	•	Define a sink interface like: write(record) -> void/Promise
+	•	Implement default sink: stdout JSONL (one JSON object per line).
+	•	Keep it pluggable: it should be trivial later to add file sink, HTTP sink, etc.
+
+	3.	Add src/observability/index.ts
+
+	•	Export a single factory: createObservability({ sink? })
+	•	createObservability returns an object with:
+	•	record(kind, level, msg, ctx?, data?) OR similar ergonomic wrapper
+	•	log helpers (info/warn/error/debug) that still emit records with kind=“log”
+	•	telemetry helper that emits kind=“telemetry”
+	•	child(ctxPatch): returns a new observability instance that merges ctx
+	•	Ensure ctx merge is shallow and predictable.
+	•	Ensure all emissions go through sink.
+	•	No BaseContext concept (no env var dumping). Only ctx.
+
+	4.	Add src/observability/context.ts (only if truly needed)
+
+	•	If needed, it should ONLY define the ctx type (ObservabilityContext) and merge helper.
+	•	If you can avoid an extra file, do so.
+
+B) Repo threading: instantiate and pass observability through the workflow
+	1.	src/index.ts
+
+	•	Create one obs instance at startup (createObservability()).
+	•	For each webhook request:
+	•	generate requestId
+	•	create obsRun = obs.child({ requestId, component: “server” })
+	•	use obsRun for all downstream calls by passing it into functions or passing ctx that contains requestId.
+	•	Do NOT attempt to centralize all logging everywhere yet; only enforce that Notion-client lifecycle logs go through obs.
+
+	2.	Thread obs through these layers (as args, no globals):
+
+	•	authenticateAndNormalizeWebhook (optional to add, but fine either way)
+	•	routeWebhookEvent
+	•	executeRoutePlan
+	•	enqueueObjectiveFanoutFromOrigin / runObjectiveFanout
+	•	routing/configDatabase cache refresh path
+Goal: every Notion API call can be attributed to the requestId that caused it.
+
+C) Notion client refactor: make it instantiable and instrumented (0th order)
+	1.	Replace direct config capture inside notion/client.ts with an instantiable client:
+
+	•	Add createNotionClient({ notionToken, notionVersion, maxRps, maxRetries, obs })
+	•	Client exposes request({ path, method, body, extraHeaders, operation, ctx })
+	•	Keep existing throttling/queue semantics (3 rps worker + retry).
+	•	Important: instrument queue wait time.
+	•	Capture enqueue timestamp
+	•	When worker begins executing the item, compute queueWaitMs
+	•	Instrument fetch duration separately (network latency).
+	•	Track retries:
+	•	attempt number
+	•	total retries
+	•	if 429, capture retry-after header (seconds or date) if present
+	•	Emit telemetry records via obs.telemetry(…) for:
+	•	notion.request.enqueued (optional)
+	•	notion.request.started (optional)
+	•	notion.request.completed (required)
+	•	notion.request.retry (required when it happens)
+	•	notion.request.failed (required on non-ok final or exception)
+
+	2.	Remove or minimize console.log from notion/client.ts. Replace with obs records.
+
+	•	It’s okay for other modules to still console.log for now, but Notion request lifecycle should be observability-driven.
+
+D) Notion primitives: ensure operation attribution (1st order)
+	1.	Update src/notion/api.ts so primitives accept an obs or ctx:
+
+	•	Each primitive should pass a stable operation name into the client request:
+	•	notion.getPage
+	•	notion.queryDatabase
+	•	notion.createPage
+	•	notion.getPagePropertyItems
+	•	notion.getRelationIdsFromPageProperty
+	•	notion.getSingleRelationIdFromPageProperty
+	•	The primitive itself should not invent requestId; it uses ctx passed in.
+	•	If the primitive does multiple underlying requests (pagination), record each request with the same ctx and an operation suffix if needed:
+	•	notion.getPagePropertyItems.page (or include page index in data)
+
+E) Workflow-level attribution (2nd order): stable operation names at call sites
+	1.	At call sites, make operation reflect “why”:
+
+	•	routing/configDatabase/loadRoutes.ts should pass something like:
+	•	operation: “routing.loadDispatchConfig”
+	•	dispatch/createCommand.ts should pass:
+	•	operation: “dispatch.createCommand”
+	•	fanout should pass:
+	•	operation: “dispatch.fanout.enumerateTasks”
+	•	operation: “dispatch.fanout.createCommand”
+Mechanism:
+	•	Either pass ctx with operation already set via obs.child({ operation: … })
+	•	Or pass operation explicitly to primitives
+Pick one style and be consistent.
+
+F) Keep it future-compatible for stress testing
+	•	Ensure createNotionClient can be instantiated independently (separate token, separate rps, separate sink).
+	•	Avoid hidden singletons. Avoid module-level loadConfig in notion/client.ts.
+	•	The main server should create a single Notion client instance at startup and reuse it.
+
+Constraints / success criteria
+	•	Do NOT introduce BaseContext or env var dumping.
+	•	Do NOT add OpenTelemetry SDK yet. This is a homegrown JSONL telemetry stream.
+	•	Do NOT create a new “notion file inside every module” just for plumbing; pass obs/ctx through function args.
+	•	Preserve existing behavior:
+	•	routing/dispatch/fanout semantics must not change.
+	•	throttling and retries must not regress.
+	•	“Complete” includes removing old logging in Notion client and using observability records instead, and ensuring all Notion requests have requestId + operation attribution when invoked from webhook flow.
+
+Deliverables
+	1.	New src/observability/ module as described.
+	2.	Instantiable Notion client with instrumentation.
+	3.	Notion primitives updated to use the client and accept ctx/obs.
+	4.	Webhook pipeline updated to instantiate obs per request and thread through routing/dispatch/fanout/notion calls.
+	5.	A short README section (or comments) describing:
+
+	•	What fields are in ctx
+	•	What operation naming convention to follow
+	•	Where the JSONL is emitted (stdout) and how it can later be swapped to file sink
+

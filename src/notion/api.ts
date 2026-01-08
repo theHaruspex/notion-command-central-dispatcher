@@ -1,4 +1,4 @@
-import { notionRequest } from "./client";
+import { notionRequest } from "./clientPool";
 
 export interface NotionPage {
   id: string;

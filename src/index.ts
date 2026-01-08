@@ -6,6 +6,7 @@ import { authenticateAndNormalizeWebhook } from "./webhook";
 import { routeWebhookEvent } from "./routing";
 import { executeRoutePlan } from "./dispatch";
 import { WebhookAuthError, WebhookParseError } from "./webhook/errors";
+import { maybeCaptureWebhook } from "./webhook/capture";
 
 const config = loadConfig();
 
@@ -18,6 +19,20 @@ app.get("/health", (_req: Request, res: Response) => {
 app.post("/webhook", async (req: Request, res: Response) => {
   const requestId = crypto.randomUUID();
   try {
+    const captureDir = process.env.WEBHOOK_CAPTURE_DIR ?? "captures/webhooks";
+    const captureEnabled = process.env.WEBHOOK_CAPTURE === "1";
+    await maybeCaptureWebhook({
+      enabled: captureEnabled,
+      captureDir,
+      requestId,
+      headers: req.headers as Record<string, unknown>,
+      body: req.body,
+    });
+    if (captureEnabled) {
+      // eslint-disable-next-line no-console
+      console.log("[/webhook] captured_webhook", { request_id: requestId, captureDir });
+    }
+
     // eslint-disable-next-line no-console
     console.log("[/webhook] webhook_received", {
       request_id: requestId,

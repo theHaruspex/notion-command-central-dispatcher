@@ -72,38 +72,58 @@ export async function executeRoutePlan(args: {
     throw new Error("COMMAND_TRIGGER_KEY is not configured");
   }
 
-  let commandsCreated = 0;
+  const commandsDbId = config.commandsDbId;
+  const commandsTargetPagePropId = config.commandsTargetPagePropId;
+  const commandsTriggerKeyPropId = config.commandsTriggerKeyPropId;
+  const commandTriggerKey = config.commandTriggerKey;
 
-  for (const routeName of plan.matchedRouteNames) {
-    // eslint-disable-next-line no-console
-    console.log("[dispatch] creating_origin_command", {
-      request_id: requestId,
-      routeName,
-      directive_command_prop_key: config.commandsDirectiveCommandPropId,
-    });
+  const startedAt = Date.now();
 
-    try {
-      await createCommand({
-        commandsDbId: config.commandsDbId,
-        titlePropNameOrId: config.commandsCommandNamePropId || "Name",
-        commandTitle: routeName,
-        triggerKeyPropId: config.commandsTriggerKeyPropId,
-        triggerKeyValue: config.commandTriggerKey,
-        directiveCommandPropId: config.commandsDirectiveCommandPropId || undefined,
-        directiveCommandValues: config.commandsDirectiveCommandPropId ? [routeName] : undefined,
-        targetRelationPropId: config.commandsTargetPagePropId,
-        targetPageId: plan.originPageId,
-      });
-      commandsCreated += 1;
-    } catch (err) {
+  const results = await Promise.allSettled(
+    plan.matchedRouteNames.map(async (routeName) => {
       // eslint-disable-next-line no-console
-      console.error("[dispatch] create_origin_command_failed", {
+      console.log("[dispatch] creating_origin_command", {
         request_id: requestId,
         routeName,
-        error: err,
+        directive_command_prop_key: config.commandsDirectiveCommandPropId,
       });
-    }
-  }
+
+      await createCommand({
+        commandsDbId,
+        titlePropNameOrId: config.commandsCommandNamePropId || "Name",
+        commandTitle: routeName,
+        triggerKeyPropId: commandsTriggerKeyPropId,
+        triggerKeyValue: commandTriggerKey,
+        directiveCommandPropId: config.commandsDirectiveCommandPropId || undefined,
+        directiveCommandValues: config.commandsDirectiveCommandPropId ? [routeName] : undefined,
+        targetRelationPropId: commandsTargetPagePropId,
+        targetPageId: plan.originPageId,
+      });
+    }),
+  );
+
+  const commandsCreated = results.filter((r) => r.status === "fulfilled").length;
+  const failedCount = results.filter((r) => r.status === "rejected").length;
+
+  results.forEach((r, idx) => {
+    if (r.status === "fulfilled") return;
+    const routeName = plan.matchedRouteNames[idx];
+    // eslint-disable-next-line no-console
+    console.error("[dispatch] create_origin_command_failed", {
+      request_id: requestId,
+      routeName,
+      error: r.reason,
+    });
+  });
+
+  // eslint-disable-next-line no-console
+  console.log("[dispatch] origin_commands_batch_completed", {
+    request_id: requestId,
+    matchedRouteCount: plan.matchedRouteNames.length,
+    commandsCreated,
+    failedCount,
+    durationMs: Date.now() - startedAt,
+  });
 
   return {
     ok: true,

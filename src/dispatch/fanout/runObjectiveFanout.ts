@@ -31,6 +31,10 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
     throw new Error("COMMANDS_TRIGGER_KEY_PROP_ID is not configured");
   }
 
+  const commandsDbId = config.commandsDbId;
+  const commandsTargetTaskPropId = config.commandsTargetTaskPropId;
+  const commandsTriggerKeyPropId = config.commandsTriggerKeyPropId;
+
   const matchedRouteNames = Array.isArray(event.matchedRouteNames) ? event.matchedRouteNames : [];
   const titleFromRoutes =
     matchedRouteNames.length > 0 ? matchedRouteNames.join(" | ").slice(0, 200) : "Fanout";
@@ -43,19 +47,28 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
   }
 
   const taskIds = await getRelationIdsFromPageProperty(event.objectiveId, objectiveTasksPropId);
+  if (taskIds.length > config.maxFanoutTasks) {
+    // eslint-disable-next-line no-console
+    console.warn("[fanout] task_count_exceeds_cap", {
+      objectiveId: event.objectiveId,
+      originalTaskCount: taskIds.length,
+      maxFanoutTasks: config.maxFanoutTasks,
+    });
+  }
+
+  const taskIdsToProcess = taskIds.slice(0, config.maxFanoutTasks);
 
   // eslint-disable-next-line no-console
   console.log("[fanout] starting", {
     objectiveId: event.objectiveId,
     triggerKey,
-    taskCount: taskIds.length,
+    taskCount: taskIdsToProcess.length,
     matchedRouteNamesCount: matchedRouteNames.length,
+    maxFanoutTasks: config.maxFanoutTasks,
   });
 
-  let created = 0;
-  let failed = 0;
-
-  for (const taskId of taskIds) {
+  const startedAt = Date.now();
+  const promises = taskIdsToProcess.map(async (taskId) => {
     // eslint-disable-next-line no-console
     console.log("[fanout] creating_recompute_command_for_task", {
       objectiveId: event.objectiveId,
@@ -63,30 +76,43 @@ export async function runObjectiveFanout(event: AutomationEvent): Promise<Proces
       title: titleFromRoutes,
     });
 
-    try {
-      await createCommand({
-        commandsDbId: config.commandsDbId,
-        titlePropNameOrId: config.commandsCommandNamePropId,
-        commandTitle: titleFromRoutes,
-        triggerKeyPropId: config.commandsTriggerKeyPropId,
-        triggerKeyValue: triggerKey,
-        directiveCommandPropId: config.commandsDirectiveCommandPropId,
-        directiveCommandValues: config.commandsDirectiveCommandPropId ? matchedRouteNames : undefined,
-        targetRelationPropId: config.commandsTargetTaskPropId,
-        targetPageId: taskId,
-      });
-      created += 1;
-    } catch (err) {
-      failed += 1;
-      // eslint-disable-next-line no-console
-      console.error("[fanout] create_fanout_command_failed", {
-        objectiveId: event.objectiveId,
-        taskId,
-        title: titleFromRoutes,
-        error: err,
-      });
-    }
-  }
+    await createCommand({
+      commandsDbId,
+      titlePropNameOrId: config.commandsCommandNamePropId,
+      commandTitle: titleFromRoutes,
+      triggerKeyPropId: commandsTriggerKeyPropId,
+      triggerKeyValue: triggerKey,
+      directiveCommandPropId: config.commandsDirectiveCommandPropId,
+      directiveCommandValues: config.commandsDirectiveCommandPropId ? matchedRouteNames : undefined,
+      targetRelationPropId: commandsTargetTaskPropId,
+      targetPageId: taskId,
+    });
+  });
+
+  const results = await Promise.allSettled(promises);
+  const created = results.filter((r) => r.status === "fulfilled").length;
+  const failed = results.filter((r) => r.status === "rejected").length;
+
+  results.forEach((r, idx) => {
+    if (r.status === "fulfilled") return;
+    const taskId = taskIdsToProcess[idx];
+    // eslint-disable-next-line no-console
+    console.error("[fanout] create_fanout_command_failed", {
+      objectiveId: event.objectiveId,
+      taskId,
+      title: titleFromRoutes,
+      error: r.reason,
+    });
+  });
+
+  // eslint-disable-next-line no-console
+  console.log("[fanout] batch_completed", {
+    objectiveId: event.objectiveId,
+    taskCountProcessed: taskIdsToProcess.length,
+    created,
+    failed,
+    durationMs: Date.now() - startedAt,
+  });
 
   return {
     ok: failed === 0,

@@ -4,8 +4,9 @@ dotenv.config();
 
 export interface AppConfig {
   port: number;
-  notionToken: string;
+  notionTokens: string[];
   notionVersion: string;
+  maxFanoutTasks: number;
   commandsDbId: string | null;
   commandsTargetTaskPropId: string | null;
   commandsTriggerKeyPropId: string | null;
@@ -27,6 +28,14 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function parseCommaSeparatedList(raw: string | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 export function loadConfig(): AppConfig {
   const portRaw = process.env.PORT ?? "3000";
   const port = Number(portRaw);
@@ -34,13 +43,22 @@ export function loadConfig(): AppConfig {
     throw new Error(`Invalid PORT value: ${portRaw}`);
   }
 
-  const notionToken = requireEnv("NOTION_TOKEN");
+  const notionTokensFromEnv = parseCommaSeparatedList(process.env.NOTION_TOKENS);
+  const notionTokens =
+    notionTokensFromEnv.length > 0 ? notionTokensFromEnv : [requireEnv("NOTION_TOKEN")];
   const notionVersion = process.env.NOTION_VERSION ?? "2022-06-28";
+
+  const maxFanoutTasksRaw = process.env.MAX_FANOUT_TASKS ?? "200";
+  const maxFanoutTasks = Number(maxFanoutTasksRaw);
+  if (!Number.isFinite(maxFanoutTasks) || maxFanoutTasks <= 0) {
+    throw new Error(`Invalid MAX_FANOUT_TASKS value: ${maxFanoutTasksRaw}`);
+  }
 
   return {
     port,
-    notionToken,
+    notionTokens,
     notionVersion,
+    maxFanoutTasks,
     commandsDbId: process.env.COMMANDS_DB_ID ?? null,
     commandsTargetTaskPropId: process.env.COMMANDS_TARGET_TASK_PROP_ID ?? null,
     commandsTriggerKeyPropId: process.env.COMMANDS_TRIGGER_KEY_PROP_ID ?? null,
