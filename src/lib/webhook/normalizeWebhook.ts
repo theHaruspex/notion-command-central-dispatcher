@@ -2,6 +2,10 @@ export interface WebhookEvent {
   originDatabaseId: string;
   originPageId: string;
   properties: Record<string, any>;
+  originPageUrl?: string;
+  originLastEditedTime?: string;
+  sourceEventId?: string;
+  attempt?: number;
 }
 
 interface RawBody {
@@ -17,6 +21,7 @@ function asObject(payload: unknown): RawBody {
 
 export function normalizeWebhookEvent(payload: unknown): WebhookEvent {
   const obj = asObject(payload);
+  const source = obj.source && typeof obj.source === "object" ? asObject(obj.source) : null;
   const data = asObject(obj.data);
 
   if (data.object !== "page") {
@@ -40,10 +45,22 @@ export function normalizeWebhookEvent(payload: unknown): WebhookEvent {
 
   const properties = asObject(data.properties);
 
+  const originPageUrl = typeof data.url === "string" ? data.url : undefined;
+  const originLastEditedTime = typeof data.last_edited_time === "string" ? data.last_edited_time : undefined;
+
+  const sourceEventId =
+    source && typeof (source as any).event_id === "string" ? ((source as any).event_id as string) : undefined;
+  const attempt =
+    source && typeof (source as any).attempt === "number" ? ((source as any).attempt as number) : undefined;
+
   return {
     originDatabaseId,
     originPageId,
     properties,
+    originPageUrl,
+    originLastEditedTime,
+    sourceEventId,
+    attempt,
   };
 }
 

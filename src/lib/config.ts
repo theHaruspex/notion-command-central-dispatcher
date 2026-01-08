@@ -19,6 +19,8 @@ export interface DispatchConfig {
 
 export interface EventsConfig {
   notionTokens: string[];
+  eventsDbId: string | null;
+  eventsConfigDbId: string | null;
 }
 
 export interface AppConfig {
@@ -89,6 +91,8 @@ export function loadConfig(): AppConfig {
     },
     events: {
       notionTokens: eventsTokens,
+      eventsDbId: process.env.EVENTS_DB_ID ?? null,
+      eventsConfigDbId: process.env.EVENTS_CONFIG_DB_ID ?? null,
     },
   };
 }
