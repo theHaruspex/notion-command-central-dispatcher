@@ -1,9 +1,9 @@
 import { getDispatchConfigSnapshot } from "./configDatabase";
 import { matchRoutes } from "./match";
 import type { DispatchEvent } from "./match";
-import type { WebhookEvent } from "../webhook/normalizeWebhook";
+import type { WebhookEvent } from "../../../lib/webhook/normalizeWebhook";
 import type { RoutePlan } from "./plan";
-import { normalizeNotionId } from "../notion/utils";
+import { normalizeNotionId } from "../../../lib/notion/utils";
 
 export interface RouteWebhookArgs {
   requestId: string;

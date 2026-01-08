@@ -1,6 +1,6 @@
-import type { AutomationEvent, ProcessorResult } from "../../types";
-import { getRelationIdsFromPageProperty } from "../../notion/api";
-import { loadConfig } from "../../config";
+import type { AutomationEvent, ProcessorResult } from "../../../../types";
+import { getRelationIdsFromPageProperty } from "../../../../lib/notion/api";
+import { loadConfig } from "../../../../lib/config";
 import { createCommand } from "../createCommand";
 
 const config = loadConfig();

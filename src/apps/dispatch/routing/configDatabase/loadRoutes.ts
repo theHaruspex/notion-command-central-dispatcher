@@ -1,6 +1,6 @@
-import { loadConfig } from "../../config";
-import { queryDatabase } from "../../notion/api";
-import { normalizeNotionId } from "../../notion/utils";
+import { loadConfig } from "../../../../lib/config";
+import { queryDatabase } from "../../../../lib/notion/api";
+import { normalizeNotionId } from "../../../../lib/notion/utils";
 import type {
   DispatchConfigSnapshot,
   DispatchRoute,
@@ -46,21 +46,6 @@ function extractCheckboxByKey(props: Record<string, any>, key: string | null): b
   return false;
 }
 
-function extractRichTextByKey(props: Record<string, any>, key: string | null): string {
-  if (!key) return "";
-  for (const [name, prop] of Object.entries(props)) {
-    if (!prop || typeof prop !== "object") continue;
-    if ((prop as any).type !== "rich_text") continue;
-    if ((prop as any).id === key || name === key) {
-      const segments = Array.isArray((prop as any).rich_text) ? (prop as any).rich_text : [];
-      return segments
-        .map((t: any) => t.plain_text || t.text?.content || "")
-        .join("");
-    }
-  }
-  return "";
-}
-
 export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
   if (!config.dispatchConfigDbId) {
     throw new Error("DISPATCH_CONFIG_DB_ID is not configured");
@@ -91,6 +76,7 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
       });
       throw err;
     }
+
     for (const page of data.results) {
       hasPages = true;
 

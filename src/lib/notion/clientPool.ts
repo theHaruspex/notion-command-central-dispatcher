@@ -9,9 +9,7 @@ function getClients(): Array<ReturnType<typeof createNotionClient>> {
   if (clients) return clients;
 
   const config = loadConfig();
-  clients = config.notionTokens.map((token) =>
-    createNotionClient({ token, notionVersion: config.notionVersion }),
-  );
+  clients = config.notionTokens.map((token) => createNotionClient({ token, notionVersion: config.notionVersion }));
 
   if (!loggedStartup) {
     loggedStartup = true;

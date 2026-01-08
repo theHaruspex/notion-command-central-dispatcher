@@ -1,4 +1,4 @@
-import { createPage } from "../notion/api";
+import { createPage } from "../../../lib/notion/api";
 
 export interface CreateCommandArgs {
   commandsDbId: string;
@@ -63,6 +63,5 @@ export async function createCommand(args: CreateCommandArgs): Promise<void> {
     properties,
   });
 }
-
 
 

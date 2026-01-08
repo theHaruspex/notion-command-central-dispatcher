@@ -1,8 +1,4 @@
 export interface DispatchPredicate {
-  /**
-   * Map of property name -> expected string value (equality match).
-   * Property names correspond to Notion property names on the origin database.
-   */
   equals: Record<string, string>;
 }
 
@@ -21,8 +17,8 @@ export interface FanoutMapping {
 }
 
 export interface DispatchConfigSnapshot {
-  fanoutMappings: FanoutMapping[];
   routes: DispatchRoute[];
+  fanoutMappings: FanoutMapping[];
 }
 
 

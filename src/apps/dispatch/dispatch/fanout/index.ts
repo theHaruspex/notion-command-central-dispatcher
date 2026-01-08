@@ -1,6 +1,6 @@
-import type { AutomationEvent } from "../../types";
+import type { AutomationEvent } from "../../../../types";
 import { runObjectiveFanout } from "./runObjectiveFanout";
-import { getSingleRelationIdFromPageProperty } from "../../notion/api";
+import { getSingleRelationIdFromPageProperty } from "../../../../lib/notion/api";
 
 type ObjectiveId = string;
 

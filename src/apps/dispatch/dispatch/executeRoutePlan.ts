@@ -1,5 +1,5 @@
-import { loadConfig } from "../config";
-import type { WebhookEvent } from "../webhook/normalizeWebhook";
+import { loadConfig } from "../../../lib/config";
+import type { WebhookEvent } from "../../../lib/webhook/normalizeWebhook";
 import type { RoutePlan } from "../routing/plan";
 import { createCommand } from "./createCommand";
 import { enqueueObjectiveFanoutFromOrigin } from "./fanout";

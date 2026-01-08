@@ -1,26 +1,39 @@
 import crypto from "crypto";
+import express from "express";
 import type { Request, Response } from "express";
-import { loadConfig } from "./config";
-import { createApp } from "./server";
-import { authenticateAndNormalizeWebhook } from "./webhook";
-import { routeWebhookEvent } from "./routing";
-import { executeRoutePlan } from "./dispatch";
-import { WebhookAuthError, WebhookParseError } from "./webhook/errors";
-import { maybeCaptureWebhook } from "./webhook/capture";
+import { loadConfig } from "./lib/config";
+import { createRequestContext } from "./lib/logging";
+import { maybeCaptureWebhook } from "./lib/webhook/capture";
+import { WebhookAuthError, WebhookParseError } from "./lib/webhook/errors";
+import { handleDispatchWebhook } from "./apps/dispatch/handler";
+import { handleEventsWebhook } from "./apps/events/handler";
 
 const config = loadConfig();
 
-const app = createApp();
+const app = express();
+app.use(express.json());
 
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-app.post("/webhook", async (req: Request, res: Response) => {
+function captureDirFor(appName: "dispatch" | "events"): string {
+  const base = process.env.WEBHOOK_CAPTURE_DIR ?? "captures/webhooks";
+  return `${base}/${appName}`;
+}
+
+async function handleWebhookRequest(
+  appName: "dispatch" | "events",
+  req: Request,
+  res: Response,
+): Promise<Response> {
   const requestId = crypto.randomUUID();
+  const ctx = createRequestContext({ app: appName, requestId });
+
   try {
-    const captureDir = process.env.WEBHOOK_CAPTURE_DIR ?? "captures/webhooks";
     const captureEnabled = process.env.WEBHOOK_CAPTURE === "1";
+    const captureDir = captureDirFor(appName);
+
     await maybeCaptureWebhook({
       enabled: captureEnabled,
       captureDir,
@@ -28,24 +41,22 @@ app.post("/webhook", async (req: Request, res: Response) => {
       headers: req.headers as Record<string, unknown>,
       body: req.body,
     });
+
     if (captureEnabled) {
-      // eslint-disable-next-line no-console
-      console.log("[/webhook] captured_webhook", { request_id: requestId, captureDir });
+      ctx.log("info", "captured_webhook", { capture_dir: captureDir });
     }
 
+    // Preserve existing ingress visibility (still logs the body, as before).
     // eslint-disable-next-line no-console
-    console.log("[/webhook] webhook_received", {
+    console.log(`[/webhook/${appName}] webhook_received`, {
       request_id: requestId,
       body: req.body,
     });
 
-    const webhookEvent = await authenticateAndNormalizeWebhook({
-      headers: req.headers,
-      body: req.body,
-    });
-
-    const plan = await routeWebhookEvent({ requestId, webhookEvent });
-    const result = await executeRoutePlan({ requestId, webhookEvent, plan });
+    const result =
+      appName === "dispatch"
+        ? await handleDispatchWebhook({ ctx, headers: req.headers, body: req.body })
+        : await handleEventsWebhook({ ctx, headers: req.headers, body: req.body });
 
     return res.status(200).json(result);
   } catch (err) {
@@ -56,11 +67,19 @@ app.post("/webhook", async (req: Request, res: Response) => {
       return res.status(400).json({ ok: false, error: err.message, request_id: requestId });
     }
     // eslint-disable-next-line no-console
-    console.error("[/webhook] unexpected_error", {
+    console.error(`[/webhook/${appName}] unexpected_error`, {
       error: err,
     });
     return res.status(500).json({ ok: false, error: "Internal server error" });
   }
+}
+
+app.post("/webhook/dispatch", async (req: Request, res: Response) => {
+  return await handleWebhookRequest("dispatch", req, res);
+});
+
+app.post("/webhook/events", async (req: Request, res: Response) => {
+  return await handleWebhookRequest("events", req, res);
 });
 
 app.listen(config.port, () => {
