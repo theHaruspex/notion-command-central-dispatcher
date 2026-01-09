@@ -21,6 +21,7 @@ export interface EventsConfig {
   notionTokens: string[];
   eventsDbId: string | null;
   eventsConfigDbId: string | null;
+  workflowRecordsDbId: string | null;
 }
 
 export interface AppConfig {
@@ -104,6 +105,7 @@ export function loadConfig(): AppConfig {
       notionTokens: eventsTokens,
       eventsDbId: process.env.EVENTS_DB_ID ?? null,
       eventsConfigDbId: process.env.EVENTS_CONFIG_DB_ID ?? null,
+      workflowRecordsDbId: process.env.WORKFLOW_RECORDS_DB_ID ?? null,
     },
   };
 }

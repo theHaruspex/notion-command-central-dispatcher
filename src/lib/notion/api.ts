@@ -61,6 +61,20 @@ export function createNotionApi(notionRequest: NotionRequestFn) {
     return await response.json();
   }
 
+  async function updatePage(args: { pageId: string; properties: Record<string, any> }): Promise<any> {
+    const body = {
+      properties: args.properties,
+    };
+
+    const path = `/pages/${args.pageId}`;
+    const response = await notionRequest({ path, method: "PATCH", body });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Failed to update page ${args.pageId}: ${response.status} ${text}`);
+    }
+    return await response.json();
+  }
+
   async function getPagePropertyItems(
     pageId: string,
     propId: string,
@@ -123,6 +137,7 @@ export function createNotionApi(notionRequest: NotionRequestFn) {
     getPage,
     queryDatabase,
     createPage,
+    updatePage,
     getPagePropertyItems,
     getRelationIdsFromPageProperty,
     getSingleRelationIdFromPageProperty,

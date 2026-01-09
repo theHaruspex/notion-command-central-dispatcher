@@ -27,4 +27,7 @@ export const createPage = (...args: Parameters<ReturnType<typeof createNotionApi
 export const getPage = (...args: Parameters<ReturnType<typeof createNotionApi>["getPage"]>) =>
   getApi().getPage(...args);
 
+export const updatePage = (...args: Parameters<ReturnType<typeof createNotionApi>["updatePage"]>) =>
+  getApi().updatePage(...args);
+
 
