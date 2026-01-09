@@ -57,7 +57,6 @@ export async function ensureWorkflowRecordWithMeta(
     properties: {
       title: title(name),
       "Workflow Definition": { relation: [{ id: args.workflowDefinitionId }] },
-      "Created At": dateIso(args.eventTimeIso),
       "Last Event Time": dateIso(args.eventTimeIso),
       "Current Stage": rt(args.stateValue),
     },
