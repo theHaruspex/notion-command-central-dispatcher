@@ -1,12 +1,16 @@
 import { normalizeNotionId } from "../../../lib/notion/utils";
 import { createPage, queryDatabase } from "../notion";
-import { dateIso, rt, title } from "../util/notionProps";
+import { dateIso, rt, title, urlValue } from "../util/notionProps";
 
 export interface EnsureWorkflowRecordArgs {
   workflowRecordsDbId: string;
   workflowDefinitionId: string;
-  originPageId: string;
-  originPageName: string;
+
+  // New: workflow instance identity (keyed via rollup on Workflow Records)
+  workflowInstancePageId: string;
+  workflowInstancePageName: string;
+  workflowInstancePageUrl: string | null;
+
   originDatabaseId: string;
   stateValue: string;
   eventTimeIso: string;
@@ -20,7 +24,7 @@ export async function ensureWorkflowRecord(args: EnsureWorkflowRecordArgs): Prom
 export async function ensureWorkflowRecordWithMeta(
   args: EnsureWorkflowRecordArgs,
 ): Promise<{ workflowRecordId: string; created: boolean }> {
-  const originPageIdKey = normalizeNotionId(args.originPageId);
+  const workflowInstancePageIdKey = normalizeNotionId(args.workflowInstancePageId);
 
   const findData = await queryDatabase(args.workflowRecordsDbId, {
     body: {
@@ -31,10 +35,10 @@ export async function ensureWorkflowRecordWithMeta(
             relation: { contains: args.workflowDefinitionId },
           },
           {
-            property: "Origin Page ID",
+            property: "Workflow Instance Page ID",
             rollup: {
               any: {
-                rich_text: { equals: originPageIdKey },
+                rich_text: { equals: workflowInstancePageIdKey },
               },
             },
           },
@@ -50,13 +54,16 @@ export async function ensureWorkflowRecordWithMeta(
     return { workflowRecordId: existing.id, created: false };
   }
 
-  const name = `${args.originPageName || originPageIdKey} — ${args.workflowDefinitionId}`;
+  const name = `${args.workflowInstancePageName || workflowInstancePageIdKey} — ${args.workflowDefinitionId}`;
 
   const created = await createPage({
     parentDatabaseId: args.workflowRecordsDbId,
     properties: {
       title: title(name),
       "Workflow Definition": { relation: [{ id: args.workflowDefinitionId }] },
+      "Origin Database ID": rt(args.originDatabaseId),
+      "Workflow Instance Page Name": rt(args.workflowInstancePageName ?? ""),
+      "Workflow Instance Page URL": urlValue(args.workflowInstancePageUrl),
       "Last Event Time": dateIso(args.eventTimeIso),
       "Current Stage": rt(args.stateValue),
     },

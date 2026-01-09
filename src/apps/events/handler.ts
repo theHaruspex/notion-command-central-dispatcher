@@ -5,12 +5,14 @@ import { normalizeNotionId } from "../../lib/notion/utils";
 import { WebhookParseError } from "../../lib/webhook/errors";
 import { enqueueEventsJob } from "./queue";
 import { extractStateValueFromWebhookProperties, extractTitleFromWebhookProperties } from "./ingest/extractors";
+import { extractFirstRelationIdFromWebhookProperties } from "./ingest/extractRelation";
 import { isDuplicateEvent } from "./dedupe";
 import { resolveEventsConfigForWebhook } from "./config/loadEventsConfig";
+import { getWorkflowDefinitionMeta } from "./workflowDefinitions/getWorkflowDefinition";
 import { ensureWorkflowRecordWithMeta } from "./workflowRecords/ensureWorkflowRecord";
 import { createEvent } from "./write/createEvent";
 import { dateIso, rt, title, urlValue } from "./util/notionProps";
-import { updatePage } from "./notion";
+import { updatePage, getPage } from "./notion";
 
 export async function handleEventsWebhook(args: {
   ctx: RequestContext;
@@ -62,6 +64,17 @@ export async function handleEventsWebhook(args: {
       return { ok: true, request_id: ctx.requestId, skipped: true, reason: "no_matching_events_config" };
     }
 
+    const def = await getWorkflowDefinitionMeta(resolved.workflowDefinitionId);
+
+    if (!def.enabled) {
+      ctx.log("info", "skipped_workflow_definition_disabled", {
+        workflow_definition_id: resolved.workflowDefinitionId,
+        origin_database_id: originDatabaseIdKey,
+        origin_page_id: originPageIdKey,
+      });
+      return { ok: true, request_id: ctx.requestId, skipped: true, reason: "workflow_definition_disabled" };
+    }
+
     const stateValueOrNull = extractStateValueFromWebhookProperties(webhookEvent.properties, resolved.statePropertyName);
     if (stateValueOrNull === null) {
       ctx.log("warn", "skipped_state_property_missing", {
@@ -82,6 +95,46 @@ export async function handleEventsWebhook(args: {
       return { ok: true, request_id: ctx.requestId, skipped: true, reason: "no_state_value" };
     }
 
+    // Resolve workflow instance page based on workflow type
+    let workflowInstancePageId: string;
+    let workflowInstancePageName: string;
+    let workflowInstancePageUrl: string | null;
+
+    if (def.workflowType === "single_object") {
+      // For single_object, workflow instance == origin page
+      workflowInstancePageId = webhookEvent.originPageId;
+      workflowInstancePageName = originPageName;
+      workflowInstancePageUrl = webhookEvent.originPageUrl ?? null;
+    } else {
+      // For multi_object, resolve from container property
+      if (!def.containerPropertyName) {
+        ctx.log("warn", "skipped_container_property_not_configured", {
+          workflow_definition_id: resolved.workflowDefinitionId,
+          origin_database_id: originDatabaseIdKey,
+          origin_page_id: originPageIdKey,
+        });
+        return { ok: true, request_id: ctx.requestId, skipped: true, reason: "container_property_not_configured" };
+      }
+
+      const containerId = extractFirstRelationIdFromWebhookProperties(webhookEvent.properties, def.containerPropertyName);
+      if (!containerId) {
+        ctx.log("warn", "skipped_container_relation_missing", {
+          container_property_name: def.containerPropertyName,
+          workflow_definition_id: resolved.workflowDefinitionId,
+          origin_database_id: originDatabaseIdKey,
+          origin_page_id: originPageIdKey,
+        });
+        return { ok: true, request_id: ctx.requestId, skipped: true, reason: "container_relation_missing" };
+      }
+
+      workflowInstancePageId = containerId;
+      const instancePage = await getPage(workflowInstancePageId);
+      workflowInstancePageName = extractTitleFromWebhookProperties(instancePage.properties);
+      workflowInstancePageUrl = instancePage.url ?? null;
+    }
+
+    const workflowInstancePageIdKey = normalizeNotionId(workflowInstancePageId);
+
     const duplicate = await isDuplicateEvent(cfg.eventsDbId, eventUid);
     if (duplicate) {
       ctx.log("info", "event_deduped", { event_uid: eventUid, attempt });
@@ -91,18 +144,25 @@ export async function handleEventsWebhook(args: {
     const ensure = await ensureWorkflowRecordWithMeta({
       workflowRecordsDbId: cfg.workflowRecordsDbId,
       workflowDefinitionId: resolved.workflowDefinitionId,
-      originPageId: webhookEvent.originPageId,
-      originPageName,
+      workflowInstancePageId,
+      workflowInstancePageName,
+      workflowInstancePageUrl,
       originDatabaseId: originDatabaseIdKey,
       stateValue,
       eventTimeIso,
     });
 
-    ctx.log(ensure.created ? "info" : "info", ensure.created ? "workflow_record_created" : "workflow_record_reused", {
+    const logFields: Record<string, any> = {
       workflow_record_id: ensure.workflowRecordId,
       workflow_definition_id: resolved.workflowDefinitionId,
       origin_page_id: originPageIdKey,
-    });
+      workflow_instance_page_id: workflowInstancePageIdKey,
+      workflow_type: def.workflowType,
+    };
+    if (def.workflowType === "multi_object") {
+      logFields.container_property_name = def.containerPropertyName;
+    }
+    ctx.log(ensure.created ? "info" : "info", ensure.created ? "workflow_record_created" : "workflow_record_reused", logFields);
 
     await createEvent({
       eventsDbId: cfg.eventsDbId,
@@ -120,6 +180,7 @@ export async function handleEventsWebhook(args: {
         "Origin Page ID": rt(originPageIdKey),
         "Origin Page Name": rt(originPageName),
         "Origin Page URL": urlValue(webhookEvent.originPageUrl ?? null),
+        "Workflow Instance Page ID": rt(workflowInstancePageIdKey),
         "Workflow Records": { relation: [{ id: ensure.workflowRecordId }] },
       },
     });

@@ -6,6 +6,7 @@ export interface NotionPage {
   id: string;
   parent: { [key: string]: any };
   properties: Record<string, any>;
+  url?: string;
 }
 
 export function createNotionApi(notionRequest: NotionRequestFn) {
@@ -21,6 +22,7 @@ export function createNotionApi(notionRequest: NotionRequestFn) {
       id: data.id,
       parent: data.parent || {},
       properties: (data.properties as Record<string, any>) || {},
+      url: typeof data.url === "string" ? data.url : undefined,
     };
   }
 
