@@ -2,7 +2,7 @@ import { normalizeNotionId } from "../../../lib/notion/utils";
 import type { WebhookEvent } from "../../../lib/webhook/normalizeWebhook";
 import { getPage } from "../notion";
 import { extractFirstRelationIdFromWebhookProperties } from "../ingest/extractRelation";
-import { extractTitleFromWebhookProperties } from "../ingest/extractors";
+import { extractTitleFromWebhookProperties } from "../ingest/extractTitleFromProps";
 import type { WorkflowDefinitionMeta } from "./getWorkflowDefinitionMeta";
 import type { WorkflowInstance } from "../domain";
 

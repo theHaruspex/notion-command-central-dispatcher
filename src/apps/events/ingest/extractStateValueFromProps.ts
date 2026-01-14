@@ -1,12 +1,3 @@
-export function extractTitleFromWebhookProperties(props: Record<string, any>): string {
-  for (const p of Object.values(props)) {
-    if (p && typeof p === "object" && (p as any).type === "title" && Array.isArray((p as any).title)) {
-      return (p as any).title.map((t: any) => t.plain_text || t.text?.content || "").join("");
-    }
-  }
-  return "";
-}
-
 export function extractStateValueFromWebhookProperties(props: Record<string, any>, propName: string): string | null {
   const prop = props[propName];
   if (!prop || typeof prop !== "object") {
@@ -35,6 +26,4 @@ export function extractStateValueFromWebhookProperties(props: Record<string, any
     return "";
   }
 }
-
-
 
