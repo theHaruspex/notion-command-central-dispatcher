@@ -3,14 +3,18 @@ import { authenticateAndNormalizeWebhook } from "../../lib/webhook";
 import { normalizeNotionId } from "../../lib/notion/utils";
 import { WebhookParseError } from "../../lib/webhook/errors";
 import { extractStateValueFromWebhookProperties, extractTitleFromWebhookProperties } from "./ingest/extractors";
-import { extractFirstRelationIdFromWebhookProperties } from "./ingest/extractRelation";
 import { isDuplicateEvent } from "./dedupe";
 import { resolveEventsConfigForWebhook } from "./routing/resolveWorkflowRouting";
-import { getWorkflowDefinitionMeta } from "./workflowDefinitions/getWorkflowDefinition";
+import { getWorkflowDefinitionMeta } from "./workflow/getWorkflowDefinitionMeta";
+import {
+  ContainerPropertyNotConfiguredError,
+  ContainerRelationMissingError,
+  resolveWorkflowInstance,
+} from "./workflow/resolveWorkflowInstance";
 import { ensureWorkflowRecordWithMeta } from "./workflowRecords/ensureWorkflowRecord";
 import { createEvent } from "./write/createEvent";
 import { dateIso, rt, title, urlValue } from "./util/notionProps";
-import { updatePage, getPage } from "./notion";
+import { updatePage } from "./notion";
 import { loadEventsRuntimeConfig } from "./runtimeConfig/loadEventsRuntimeConfig";
 
 export async function processEventsWebhook(args: {
@@ -82,19 +86,11 @@ export async function processEventsWebhook(args: {
     return { ok: true, request_id: ctx.requestId, skipped: true, reason: "no_state_value" };
   }
 
-  // Resolve workflow instance page based on workflow type
-  let workflowInstancePageId: string;
-  let workflowInstancePageName: string;
-  let workflowInstancePageUrl: string | null;
-
-  if (def.workflowType === "single_object") {
-    // For single_object, workflow instance == origin page
-    workflowInstancePageId = webhookEvent.originPageId;
-    workflowInstancePageName = originPageName;
-    workflowInstancePageUrl = webhookEvent.originPageUrl ?? null;
-  } else {
-    // For multi_object, resolve from container property
-    if (!def.containerPropertyName) {
+  let workflowInstance: { workflowInstancePageId: string; workflowInstancePageIdKey: string; workflowInstancePageName: string; workflowInstancePageUrl: string | null };
+  try {
+    workflowInstance = await resolveWorkflowInstance({ def, webhookEvent, originPageName });
+  } catch (err) {
+    if (err instanceof ContainerPropertyNotConfiguredError) {
       ctx.log("warn", "skipped_container_property_not_configured", {
         workflow_definition_id: resolved.workflowDefinitionId,
         origin_database_id: originDatabaseIdKey,
@@ -102,9 +98,7 @@ export async function processEventsWebhook(args: {
       });
       return { ok: true, request_id: ctx.requestId, skipped: true, reason: "container_property_not_configured" };
     }
-
-    const containerId = extractFirstRelationIdFromWebhookProperties(webhookEvent.properties, def.containerPropertyName);
-    if (!containerId) {
+    if (err instanceof ContainerRelationMissingError) {
       ctx.log("warn", "skipped_container_relation_missing", {
         container_property_name: def.containerPropertyName,
         workflow_definition_id: resolved.workflowDefinitionId,
@@ -113,14 +107,13 @@ export async function processEventsWebhook(args: {
       });
       return { ok: true, request_id: ctx.requestId, skipped: true, reason: "container_relation_missing" };
     }
-
-    workflowInstancePageId = containerId;
-    const instancePage = await getPage(workflowInstancePageId);
-    workflowInstancePageName = extractTitleFromWebhookProperties(instancePage.properties);
-    workflowInstancePageUrl = instancePage.url ?? null;
+    throw err;
   }
 
-  const workflowInstancePageIdKey = normalizeNotionId(workflowInstancePageId);
+  const workflowInstancePageId = workflowInstance.workflowInstancePageId;
+  const workflowInstancePageIdKey = workflowInstance.workflowInstancePageIdKey;
+  const workflowInstancePageName = workflowInstance.workflowInstancePageName;
+  const workflowInstancePageUrl = workflowInstance.workflowInstancePageUrl;
 
   const duplicate = await isDuplicateEvent(cfg.eventsDbId, eventUid);
   if (duplicate) {
