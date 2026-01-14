@@ -9,12 +9,14 @@ import type { WorkflowInstance } from "../domain";
 export class ContainerPropertyNotConfiguredError extends Error {
   constructor() {
     super("container_property_not_configured");
+    this.name = "ContainerPropertyNotConfiguredError";
   }
 }
 
 export class ContainerRelationMissingError extends Error {
   constructor() {
     super("container_relation_missing");
+    this.name = "ContainerRelationMissingError";
   }
 }
 

@@ -2,6 +2,7 @@ import type { RequestContext } from "../../lib/logging";
 import { authenticateAndNormalizeWebhook } from "../../lib/webhook";
 import { normalizeNotionId } from "../../lib/notion/utils";
 import { WebhookParseError } from "../../lib/webhook/errors";
+import type { WorkflowInstance } from "./domain";
 import { extractTitleFromWebhookProperties } from "./ingest/extractTitleFromProps";
 import { extractStateValueFromWebhookProperties } from "./ingest/extractStateValueFromProps";
 import { isDuplicateEvent } from "./eventLog/isDuplicateEvent";
@@ -94,12 +95,7 @@ export async function processEventsWebhook(args: {
   }
 
   // 7) resolve workflow instance
-  let workflowInstance: {
-    workflowInstancePageId: string;
-    workflowInstancePageIdKey: string;
-    workflowInstancePageName: string;
-    workflowInstancePageUrl: string | null;
-  };
+  let workflowInstance: WorkflowInstance;
   try {
     workflowInstance = await resolveWorkflowInstance({ def, webhookEvent, originPageName });
   } catch (err) {
