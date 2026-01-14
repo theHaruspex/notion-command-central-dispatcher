@@ -5,7 +5,7 @@ import { WebhookParseError } from "../../lib/webhook/errors";
 import { extractStateValueFromWebhookProperties, extractTitleFromWebhookProperties } from "./ingest/extractors";
 import { extractFirstRelationIdFromWebhookProperties } from "./ingest/extractRelation";
 import { isDuplicateEvent } from "./dedupe";
-import { resolveEventsConfigForWebhook } from "./config/loadEventsConfig";
+import { resolveEventsConfigForWebhook } from "./routing/resolveWorkflowRouting";
 import { getWorkflowDefinitionMeta } from "./workflowDefinitions/getWorkflowDefinition";
 import { ensureWorkflowRecordWithMeta } from "./workflowRecords/ensureWorkflowRecord";
 import { createEvent } from "./write/createEvent";
