@@ -4,7 +4,7 @@ import { normalizeNotionId } from "../../lib/notion/utils";
 import { WebhookParseError } from "../../lib/webhook/errors";
 import { extractTitleFromWebhookProperties } from "./ingest/extractTitleFromProps";
 import { extractStateValueFromWebhookProperties } from "./ingest/extractStateValueFromProps";
-import { isDuplicateEvent } from "./dedupe";
+import { isDuplicateEvent } from "./eventLog/isDuplicateEvent";
 import { resolveEventsConfigForWebhook } from "./routing/resolveWorkflowRouting";
 import { getWorkflowDefinitionMeta } from "./workflow/getWorkflowDefinitionMeta";
 import {
@@ -13,7 +13,7 @@ import {
   resolveWorkflowInstance,
 } from "./workflow/resolveWorkflowInstance";
 import { ensureWorkflowRecordWithMeta } from "./workflowRecords/ensureWorkflowRecord";
-import { createEvent } from "./write/createEvent";
+import { writeEventLogEntry } from "./eventLog/writeEventLogEntry";
 import { dateIso, rt, title, urlValue } from "./util/notionProps";
 import { updatePage } from "./notion";
 import { loadEventsRuntimeConfig } from "./runtimeConfig/loadEventsRuntimeConfig";
@@ -145,7 +145,7 @@ export async function processEventsWebhook(args: {
   }
   ctx.log(ensure.created ? "info" : "info", ensure.created ? "workflow_record_created" : "workflow_record_reused", logFields);
 
-  await createEvent({
+  await writeEventLogEntry({
     eventsDbId: cfg.eventsDbId,
     properties: {
       title: title(eventUid),
