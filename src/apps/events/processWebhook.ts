@@ -1,6 +1,5 @@
 import type { RequestContext } from "../../lib/logging";
 import { authenticateAndNormalizeWebhook } from "../../lib/webhook";
-import { loadConfig } from "../../lib/config";
 import { normalizeNotionId } from "../../lib/notion/utils";
 import { WebhookParseError } from "../../lib/webhook/errors";
 import { extractStateValueFromWebhookProperties, extractTitleFromWebhookProperties } from "./ingest/extractors";
@@ -12,6 +11,7 @@ import { ensureWorkflowRecordWithMeta } from "./workflowRecords/ensureWorkflowRe
 import { createEvent } from "./write/createEvent";
 import { dateIso, rt, title, urlValue } from "./util/notionProps";
 import { updatePage, getPage } from "./notion";
+import { loadEventsRuntimeConfig } from "./runtimeConfig/loadEventsRuntimeConfig";
 
 export async function processEventsWebhook(args: {
   ctx: RequestContext;
@@ -20,16 +20,7 @@ export async function processEventsWebhook(args: {
 }): Promise<any> {
   const { ctx, headers, body } = args;
 
-  const cfg = loadConfig().events;
-  if (!cfg.eventsDbId) {
-    throw new Error("EVENTS_DB_ID is not configured");
-  }
-  if (!cfg.eventsConfigDbId) {
-    throw new Error("EVENTS_CONFIG_DB_ID is not configured");
-  }
-  if (!cfg.workflowRecordsDbId) {
-    throw new Error("WORKFLOW_RECORDS_DB_ID is not configured");
-  }
+  const cfg = loadEventsRuntimeConfig();
 
   const webhookEvent = await authenticateAndNormalizeWebhook({ headers, body });
 
