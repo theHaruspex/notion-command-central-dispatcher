@@ -7,17 +7,6 @@ export function extractTitleFromWebhookProperties(props: Record<string, any>): s
   return "";
 }
 
-export function extractStatusNameFromWebhookProperties(
-  props: Record<string, any>,
-  propName: string,
-): string {
-  const prop = props[propName];
-  if (prop && typeof prop === "object" && (prop as any).type === "status") {
-    return ((prop as any).status?.name as string | undefined) ?? "";
-  }
-  return "";
-}
-
 export function extractStateValueFromWebhookProperties(props: Record<string, any>, propName: string): string | null {
   const prop = props[propName];
   if (!prop || typeof prop !== "object") {
