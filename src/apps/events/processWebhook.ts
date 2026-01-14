@@ -25,10 +25,13 @@ export async function processEventsWebhook(args: {
 }): Promise<any> {
   const { ctx, headers, body } = args;
 
+  // 1) load runtime config
   const cfg = loadEventsRuntimeConfig();
 
+  // 2) auth+normalize webhook
   const webhookEvent = await authenticateAndNormalizeWebhook({ headers, body });
 
+  // 3) compute EventsWebhookMeta
   const eventUid = webhookEvent.sourceEventId;
   if (!eventUid) {
     throw new WebhookParseError("Missing source event id on source.event_id");
@@ -42,6 +45,7 @@ export async function processEventsWebhook(args: {
   const originPageIdKey = normalizeNotionId(webhookEvent.originPageId);
   const originPageName = extractTitleFromWebhookProperties(webhookEvent.properties);
 
+  // 4) resolve routing
   const resolved = await resolveEventsConfigForWebhook({
     eventsConfigDbId: cfg.eventsConfigDbId,
     originDatabaseId: originDatabaseIdKey,
@@ -56,6 +60,7 @@ export async function processEventsWebhook(args: {
     return { ok: true, request_id: ctx.requestId, skipped: true, reason: "no_matching_events_config" };
   }
 
+  // 5) load workflow definition
   const def = await getWorkflowDefinitionMeta(resolved.workflowDefinitionId);
 
   if (!def.enabled) {
@@ -67,6 +72,7 @@ export async function processEventsWebhook(args: {
     return { ok: true, request_id: ctx.requestId, skipped: true, reason: "workflow_definition_disabled" };
   }
 
+  // 6) extract state value (and validate missing/empty exactly as before)
   const stateValueOrNull = extractStateValueFromWebhookProperties(webhookEvent.properties, resolved.statePropertyName);
   if (stateValueOrNull === null) {
     ctx.log("warn", "skipped_state_property_missing", {
@@ -87,7 +93,13 @@ export async function processEventsWebhook(args: {
     return { ok: true, request_id: ctx.requestId, skipped: true, reason: "no_state_value" };
   }
 
-  let workflowInstance: { workflowInstancePageId: string; workflowInstancePageIdKey: string; workflowInstancePageName: string; workflowInstancePageUrl: string | null };
+  // 7) resolve workflow instance
+  let workflowInstance: {
+    workflowInstancePageId: string;
+    workflowInstancePageIdKey: string;
+    workflowInstancePageName: string;
+    workflowInstancePageUrl: string | null;
+  };
   try {
     workflowInstance = await resolveWorkflowInstance({ def, webhookEvent, originPageName });
   } catch (err) {
@@ -116,12 +128,14 @@ export async function processEventsWebhook(args: {
   const workflowInstancePageName = workflowInstance.workflowInstancePageName;
   const workflowInstancePageUrl = workflowInstance.workflowInstancePageUrl;
 
+  // 8) dedupe decision
   const duplicate = await isDuplicateEvent(cfg.eventsDbId, eventUid);
   if (duplicate) {
     ctx.log("info", "event_deduped", { event_uid: eventUid, attempt });
     return { ok: true, request_id: ctx.requestId, deduped: true };
   }
 
+  // 9) ensure workflow record (log created vs reused exactly as before)
   const ensure = await ensureWorkflowRecordWithMeta({
     workflowRecordsDbId: cfg.workflowRecordsDbId,
     workflowDefinitionId: resolved.workflowDefinitionId,
@@ -145,6 +159,7 @@ export async function processEventsWebhook(args: {
   }
   ctx.log(ensure.created ? "info" : "info", ensure.created ? "workflow_record_created" : "workflow_record_reused", logFields);
 
+  // 10) write event log entry
   await writeEventLogEntry({
     eventsDbId: cfg.eventsDbId,
     properties: {
@@ -166,12 +181,14 @@ export async function processEventsWebhook(args: {
     },
   });
 
+  // 11) update workflow record projection
   await updateWorkflowRecordProjection({
     workflowRecordId: ensure.workflowRecordId,
     eventTimeIso,
     stateValue,
   });
 
+  // 12) log event_created and return the same response object
   ctx.log("info", "event_created", {
     event_uid: eventUid,
     workflow_record_id: ensure.workflowRecordId,
