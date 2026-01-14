@@ -12,10 +12,10 @@ import {
   ContainerRelationMissingError,
   resolveWorkflowInstance,
 } from "./workflow/resolveWorkflowInstance";
-import { ensureWorkflowRecordWithMeta } from "./workflowRecords/ensureWorkflowRecord";
+import { ensureWorkflowRecordWithMeta } from "./records/ensureWorkflowRecord";
 import { writeEventLogEntry } from "./eventLog/writeEventLogEntry";
 import { dateIso, rt, title, urlValue } from "./util/notionProps";
-import { updatePage } from "./notion";
+import { updateWorkflowRecordProjection } from "./records/updateWorkflowRecordProjection";
 import { loadEventsRuntimeConfig } from "./runtimeConfig/loadEventsRuntimeConfig";
 
 export async function processEventsWebhook(args: {
@@ -166,12 +166,10 @@ export async function processEventsWebhook(args: {
     },
   });
 
-  await updatePage({
-    pageId: ensure.workflowRecordId,
-    properties: {
-      "Last Event Time": dateIso(eventTimeIso),
-      "Current Stage": rt(stateValue),
-    },
+  await updateWorkflowRecordProjection({
+    workflowRecordId: ensure.workflowRecordId,
+    eventTimeIso,
+    stateValue,
   });
 
   ctx.log("info", "event_created", {
