@@ -13,6 +13,7 @@ import {
   ContainerRelationMissingError,
   resolveWorkflowInstance,
 } from "./workflow/resolveWorkflowInstance";
+import { resolveWorkflowStepId } from "./workflow/resolveWorkflowStep";
 import { ensureWorkflowRecordWithMeta } from "./records/ensureWorkflowRecord";
 import { writeEventLogEntry } from "./eventLog/writeEventLogEntry";
 import { dateIso, rt, title, urlValue } from "./util/notionProps";
@@ -178,12 +179,24 @@ export async function processEventsWebhook(args: {
   const workflowInstancePageName = workflowInstance.workflowInstancePageName;
   const workflowInstancePageUrl = workflowInstance.workflowInstancePageUrl;
 
+  let workflowStepId: string | null = null;
+  let resolveMode: "scan_relation" | "match_state_value" | "none" = "none";
+
   // 8) dedupe decision
   const duplicate = await timeStep(ctx, "dedupe_event", () => isDuplicateEvent(cfg.eventsDbId, eventUid));
   if (duplicate) {
     ctx.log("info", "event_deduped", { event_uid: eventUid, attempt });
     return { ok: true, request_id: ctx.requestId, deduped: true };
   }
+
+  const resolvedStep = await timeStep(
+    ctx,
+    "resolve_workflow_step",
+    () => resolveWorkflowStepId({ def, webhookEvent, stateValue }),
+    { workflow_type: def.workflowType },
+  );
+  workflowStepId = resolvedStep.workflowStepId;
+  resolveMode = resolvedStep.resolveMode;
 
   // 9) ensure workflow record (log created vs reused exactly as before)
   const ensure = await timeStep(ctx, "ensure_workflow_record", () =>
@@ -230,6 +243,8 @@ export async function processEventsWebhook(args: {
         "Origin Page Name": rt(originPageName),
         "Origin Page URL": urlValue(webhookEvent.originPageUrl ?? null),
         "Workflow Instance Page ID": rt(workflowInstancePageIdKey),
+        "Workflow Definitions": { relation: [{ id: resolved.workflowDefinitionId }] },
+        "Workflow Step": workflowStepId ? { relation: [{ id: workflowStepId }] } : { relation: [] },
         "Workflow Records": { relation: [{ id: ensure.workflowRecordId }] },
       },
     }),
@@ -252,6 +267,8 @@ export async function processEventsWebhook(args: {
     origin_page_id: originPageIdKey,
     state_property_name: resolved.statePropertyName,
     state_value: stateValue,
+    workflow_step_id: workflowStepId,
+    workflow_step_resolve_mode: resolveMode,
   });
 
   return { ok: true, request_id: ctx.requestId, deduped: false, workflow_record_id: ensure.workflowRecordId };
