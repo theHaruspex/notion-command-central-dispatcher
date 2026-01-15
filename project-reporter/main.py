@@ -5,7 +5,7 @@ from pathlib import Path
 # CONFIGURATION
 CONFIG = {
     "exclude_paths": [
-        "node_modules", "dist", ".git", "__pycache__", "prompts", ".idea", ".vscode", "logs", "tmp", "project-reporter",
+        "node_modules", "dist", ".git", "__pycache__", "prompts", ".idea", ".vscode", "logs", "tmp", "project-reporter", "dispatch",
     ],
     "exclude_extensions": [
         ".pyc", ".log", ".DS_Store", ".env", ".example", ".json",

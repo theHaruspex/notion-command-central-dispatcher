@@ -1,6 +1,7 @@
 const NOTION_BASE_URL = "https://api.notion.com/v1";
 const MAX_REQUESTS_PER_SECOND = 3;
 const MAX_RETRIES = 3;
+const REQUEST_TIMEOUT_MS = 15_000;
 
 type TaskFn<T> = () => Promise<T>;
 
@@ -55,21 +56,46 @@ export function createNotionClient(args: { token: string; notionVersion: string 
   }
 
   async function doFetchWithRetry(input: RequestInfo | URL, init: RequestInit, attempt = 1): Promise<Response> {
-    const response = await fetch(input, init);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    const requestInit: RequestInit = { ...init, signal: controller.signal };
+    try {
+      const response = await fetch(input, requestInit);
 
-    if ((response.status === 429 || response.status >= 500) && attempt < MAX_RETRIES) {
-      const delayMs = 2 ** (attempt - 1) * 500;
-      // eslint-disable-next-line no-console
-      console.warn("[notion:request] transient error, will retry", {
-        status: response.status,
-        attempt,
-        delayMs,
-      });
-      await new Promise((r) => setTimeout(r, delayMs));
-      return doFetchWithRetry(input, init, attempt + 1);
+      if ((response.status === 429 || response.status >= 500) && attempt < MAX_RETRIES) {
+        const delayMs = 2 ** (attempt - 1) * 500;
+        // eslint-disable-next-line no-console
+        console.warn("[notion:request] transient error, will retry", {
+          status: response.status,
+          attempt,
+          delayMs,
+        });
+        await new Promise((r) => setTimeout(r, delayMs));
+        return doFetchWithRetry(input, init, attempt + 1);
+      }
+
+      return response;
+    } catch (err) {
+      const isAbortError = err instanceof Error && err.name === "AbortError";
+      if (isAbortError) {
+        // eslint-disable-next-line no-console
+        console.warn("[notion:request] timeout", {
+          status: "timeout",
+          attempt,
+          timeoutMs: REQUEST_TIMEOUT_MS,
+          method: init.method,
+          input: typeof input === "string" ? input : input.toString(),
+        });
+        if (attempt < MAX_RETRIES) {
+          const delayMs = 2 ** (attempt - 1) * 500;
+          await new Promise((r) => setTimeout(r, delayMs));
+          return doFetchWithRetry(input, init, attempt + 1);
+        }
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
     }
-
-    return response;
   }
 
   return {
