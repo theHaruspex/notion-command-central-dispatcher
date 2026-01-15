@@ -7,6 +7,7 @@ export interface WorkflowDefinitionMeta {
   enabled: boolean;
   workflowType: WorkflowType;
   containerPropertyName: string | null; // only meaningful for multi_object
+  workflowStepsPropId: string;
 }
 
 function readCheckbox(props: Record<string, any>, name: string): boolean {
@@ -34,6 +35,11 @@ function readRichTextAsPlain(props: Record<string, any>, name: string): string {
 export async function getWorkflowDefinitionMeta(workflowDefinitionId: string): Promise<WorkflowDefinitionMeta> {
   const page = await getPage(workflowDefinitionId);
 
+  const workflowStepsPropId = (page.properties as any)?.["Workflow Steps"]?.id;
+  if (typeof workflowStepsPropId !== "string" || !workflowStepsPropId) {
+    throw new Error(`Missing Workflow Steps property id for workflow definition ${workflowDefinitionId}`);
+  }
+
   const enabled = readCheckbox(page.properties, "Enabled");
 
   const workflowTypeRaw = readSelectName(page.properties, "Workflow Type");
@@ -52,6 +58,7 @@ export async function getWorkflowDefinitionMeta(workflowDefinitionId: string): P
     enabled,
     workflowType,
     containerPropertyName,
+    workflowStepsPropId,
   };
 }
 
