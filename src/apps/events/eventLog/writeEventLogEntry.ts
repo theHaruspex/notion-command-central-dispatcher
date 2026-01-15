@@ -1,6 +1,6 @@
 import { createPage } from "../notion";
 
-export async function createEvent(args: {
+export async function writeEventLogEntry(args: {
   eventsDbId: string;
   properties: Record<string, any>;
 }): Promise<void> {

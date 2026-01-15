@@ -1,10 +1,11 @@
 import { queryDatabase } from "../notion";
 import { normalizeNotionId } from "../../../lib/notion/utils";
 
-export interface ResolvedEventsConfig {
+interface ResolvedEventsConfig {
   workflowDefinitionId: string;
   statePropertyName: string;
   originDatabaseName: string;
+  statePropertyPresent: boolean;
 }
 
 /**
@@ -52,102 +53,19 @@ function readRelationFirstId(props: Record<string, any>, name: string): string |
   return first && typeof first.id === "string" ? first.id : null;
 }
 
-export async function resolveEventsConfig(args: {
-  eventsConfigDbId: string;
-  originDatabaseId: string;
-  statePropertyName: string;
-}): Promise<{ workflowDefinitionId: string; originDatabaseName: string } | null> {
-  const originDatabaseIdKey = normalizeIdLike(args.originDatabaseId);
-
-  // Query all enabled configs with matching State Property Name, then filter by normalized Origin Database ID in code
-  // (Notion DB IDs in config rows may be stored with or without dashes, so we normalize both sides for comparison)
-  const data = await queryDatabase(args.eventsConfigDbId, {
-    body: {
-      filter: {
-        and: [
-          { property: "Enabled", checkbox: { equals: true } },
-          {
-            property: "State Property Name",
-            rich_text: { equals: args.statePropertyName },
-          },
-        ],
-      },
-      page_size: 100,
-    },
-  });
-
-  const results = Array.isArray((data as any)?.results) ? (data as any).results : [];
-  for (const row of results) {
-    const props = (row as any)?.properties as Record<string, any>;
-    if (!props || typeof props !== "object") continue;
-
-    // Double-check enabled (defensive)
-    if (!readCheckbox(props, "Enabled")) continue;
-
-    // Normalize the stored Origin Database ID and compare to the target
-    const storedOriginDbId = readRichTextAsPlain(props, "Origin Database ID");
-    if (normalizeIdLike(storedOriginDbId) !== originDatabaseIdKey) continue;
-
-    const workflowDefinitionId = readRelationFirstId(props, "Workflow Definition");
-    if (!workflowDefinitionId) continue;
-
-    const originDatabaseName = readTitleAsPlain(props, "Origin Database Name");
-    return { workflowDefinitionId, originDatabaseName };
-  }
-
-  // Handle pagination if needed (though with State Property Name filter, results should be small)
-  let cursor: string | null | undefined = (data as any)?.next_cursor;
-  while (cursor) {
-    const nextData = await queryDatabase(args.eventsConfigDbId, {
-      body: {
-        filter: {
-          and: [
-            { property: "Enabled", checkbox: { equals: true } },
-            {
-              property: "State Property Name",
-              rich_text: { equals: args.statePropertyName },
-            },
-          ],
-        },
-        page_size: 100,
-        start_cursor: cursor,
-      },
-    });
-
-    const nextResults = Array.isArray((nextData as any)?.results) ? (nextData as any).results : [];
-    for (const row of nextResults) {
-      const props = (row as any)?.properties as Record<string, any>;
-      if (!props || typeof props !== "object") continue;
-
-      if (!readCheckbox(props, "Enabled")) continue;
-
-      const storedOriginDbId = readRichTextAsPlain(props, "Origin Database ID");
-      if (normalizeIdLike(storedOriginDbId) !== originDatabaseIdKey) continue;
-
-      const workflowDefinitionId = readRelationFirstId(props, "Workflow Definition");
-      if (!workflowDefinitionId) continue;
-
-      const originDatabaseName = readTitleAsPlain(props, "Origin Database Name");
-      return { workflowDefinitionId, originDatabaseName };
-    }
-
-    cursor = (nextData as any)?.next_cursor;
-    if (!(nextData as any)?.has_more) break;
-  }
-
-  return null;
-}
-
 export async function resolveEventsConfigForWebhook(args: {
   eventsConfigDbId: string;
   originDatabaseId: string;
   webhookProperties: Record<string, any>;
 }): Promise<ResolvedEventsConfig | null> {
   const originDatabaseIdKey = normalizeIdLike(args.originDatabaseId);
+  console.log("[events:routing] start", {
+    originDatabaseIdKey,
+    webhook_property_keys_count: Object.keys(args.webhookProperties).length,
+  });
 
   // Load all enabled configs, then filter by normalized Origin Database ID in code
   // (Notion DB IDs in config rows may be stored with or without dashes, so we normalize both sides for comparison)
-  // Pick the config whose state property exists in the webhook payload.
   let cursor: string | null | undefined = null;
 
   // eslint-disable-next-line no-constant-condition
@@ -176,20 +94,28 @@ export async function resolveEventsConfigForWebhook(args: {
       if (normalizeIdLike(storedOriginDbId) !== originDatabaseIdKey) continue;
 
       const statePropertyName = readRichTextAsPlain(props, "State Property Name");
-      if (!statePropertyName) continue;
-      if (!(statePropertyName in args.webhookProperties)) continue;
-
+      const statePropertyPresent = statePropertyName in args.webhookProperties;
       const workflowDefinitionId = readRelationFirstId(props, "Workflow Definition");
-      if (!workflowDefinitionId) continue;
-
       const originDatabaseName = readTitleAsPlain(props, "Origin Database Name");
-      return { workflowDefinitionId, statePropertyName, originDatabaseName };
+
+      console.log("[events:routing] candidate_row", {
+        ...(typeof (row as any)?.id === "string" ? { page_id: (row as any).id } : {}),
+        statePropertyName,
+        statePropertyPresent,
+        hasWorkflowDefinitionId: !!workflowDefinitionId,
+        originDatabaseName,
+      });
+
+      if (!statePropertyName) continue;
+      if (!workflowDefinitionId) continue;
+      return { workflowDefinitionId, statePropertyName, originDatabaseName, statePropertyPresent };
     }
 
     if (!(data as any)?.has_more || !(data as any)?.next_cursor) break;
     cursor = (data as any).next_cursor;
   }
 
+  console.log("[events:routing] no_enabled_row_for_origin_db", { originDatabaseIdKey });
   return null;
 }
 

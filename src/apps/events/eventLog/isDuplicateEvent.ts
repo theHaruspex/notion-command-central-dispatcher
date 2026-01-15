@@ -1,4 +1,4 @@
-import { queryDatabase } from "./notion";
+import { queryDatabase } from "../notion";
 
 export async function isDuplicateEvent(eventsDbId: string, eventUid: string): Promise<boolean> {
   const data = await queryDatabase(eventsDbId, {
