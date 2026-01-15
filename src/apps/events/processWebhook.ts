@@ -207,7 +207,6 @@ export async function processEventsWebhook(args: {
       workflowInstancePageName,
       workflowInstancePageUrl,
       originDatabaseId: originDatabaseIdKey,
-      stateValue,
       eventTimeIso,
     }),
   );
@@ -255,7 +254,6 @@ export async function processEventsWebhook(args: {
     updateWorkflowRecordProjection({
       workflowRecordId: ensure.workflowRecordId,
       eventTimeIso,
-      stateValue,
     }),
   );
 
