@@ -12,7 +12,6 @@ export interface EnsureWorkflowRecordArgs {
   workflowInstancePageUrl: string | null;
 
   originDatabaseId: string;
-  stateValue: string;
   eventTimeIso: string;
 }
 
@@ -65,7 +64,6 @@ export async function ensureWorkflowRecordWithMeta(
       "Workflow Instance Page Name": rt(args.workflowInstancePageName ?? ""),
       "Workflow Instance Page URL": urlValue(args.workflowInstancePageUrl),
       "Last Event Time": dateIso(args.eventTimeIso),
-      "Current Stage": rt(args.stateValue),
     },
   });
 

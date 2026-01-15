@@ -30,4 +30,12 @@ export const getPage = (...args: Parameters<ReturnType<typeof createNotionApi>["
 export const updatePage = (...args: Parameters<ReturnType<typeof createNotionApi>["updatePage"]>) =>
   getApi().updatePage(...args);
 
+export const getRelationIdsFromPageProperty = (
+  ...args: Parameters<ReturnType<typeof createNotionApi>["getRelationIdsFromPageProperty"]>
+) => getApi().getRelationIdsFromPageProperty(...args);
+
+export const getSingleRelationIdFromPageProperty = (
+  ...args: Parameters<ReturnType<typeof createNotionApi>["getSingleRelationIdFromPageProperty"]>
+) => getApi().getSingleRelationIdFromPageProperty(...args);
+
 
