@@ -5,6 +5,7 @@ interface ResolvedEventsConfig {
   workflowDefinitionId: string;
   statePropertyName: string;
   originDatabaseName: string;
+  statePropertyPresent: boolean;
 }
 
 /**
@@ -58,10 +59,13 @@ export async function resolveEventsConfigForWebhook(args: {
   webhookProperties: Record<string, any>;
 }): Promise<ResolvedEventsConfig | null> {
   const originDatabaseIdKey = normalizeIdLike(args.originDatabaseId);
+  console.log("[events:routing] start", {
+    originDatabaseIdKey,
+    webhook_property_keys_count: Object.keys(args.webhookProperties).length,
+  });
 
   // Load all enabled configs, then filter by normalized Origin Database ID in code
   // (Notion DB IDs in config rows may be stored with or without dashes, so we normalize both sides for comparison)
-  // Pick the config whose state property exists in the webhook payload.
   let cursor: string | null | undefined = null;
 
   // eslint-disable-next-line no-constant-condition
@@ -90,20 +94,28 @@ export async function resolveEventsConfigForWebhook(args: {
       if (normalizeIdLike(storedOriginDbId) !== originDatabaseIdKey) continue;
 
       const statePropertyName = readRichTextAsPlain(props, "State Property Name");
-      if (!statePropertyName) continue;
-      if (!(statePropertyName in args.webhookProperties)) continue;
-
+      const statePropertyPresent = statePropertyName in args.webhookProperties;
       const workflowDefinitionId = readRelationFirstId(props, "Workflow Definition");
-      if (!workflowDefinitionId) continue;
-
       const originDatabaseName = readTitleAsPlain(props, "Origin Database Name");
-      return { workflowDefinitionId, statePropertyName, originDatabaseName };
+
+      console.log("[events:routing] candidate_row", {
+        ...(typeof (row as any)?.id === "string" ? { page_id: (row as any).id } : {}),
+        statePropertyName,
+        statePropertyPresent,
+        hasWorkflowDefinitionId: !!workflowDefinitionId,
+        originDatabaseName,
+      });
+
+      if (!statePropertyName) continue;
+      if (!workflowDefinitionId) continue;
+      return { workflowDefinitionId, statePropertyName, originDatabaseName, statePropertyPresent };
     }
 
     if (!(data as any)?.has_more || !(data as any)?.next_cursor) break;
     cursor = (data as any).next_cursor;
   }
 
+  console.log("[events:routing] no_enabled_row_for_origin_db", { originDatabaseIdKey });
   return null;
 }
 

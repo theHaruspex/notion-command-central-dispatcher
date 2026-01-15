@@ -56,9 +56,22 @@ export async function processEventsWebhook(args: {
   if (!resolved) {
     ctx.log("warn", "skipped_no_matching_events_config", {
       origin_database_id: originDatabaseIdKey,
+      origin_database_id_key: originDatabaseIdKey,
+      origin_database_id_raw: webhookEvent.originDatabaseId,
       origin_page_id: originPageIdKey,
+      webhook_property_keys_count: Object.keys(webhookEvent.properties).length,
     });
     return { ok: true, request_id: ctx.requestId, skipped: true, reason: "no_matching_events_config" };
+  }
+
+  if (!resolved.statePropertyPresent) {
+    ctx.log("warn", "matched_events_config_but_state_property_missing_in_payload", {
+      workflow_definition_id: resolved.workflowDefinitionId,
+      origin_database_id: originDatabaseIdKey,
+      origin_page_id: originPageIdKey,
+      state_property_name: resolved.statePropertyName,
+      webhook_property_keys_sample: Object.keys(webhookEvent.properties).slice(0, 10),
+    });
   }
 
   // 5) load workflow definition
