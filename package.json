@@ -1,10 +1,16 @@
 {
-  "name": "notion-command-central-dispatcher",
-  "version": "1.0.0",
+  "name": "@herospecs/notion-dispatch-events",
+  "version": "0.1.0",
   "description": "Notion Command Central dispatcher and Objective fan-out integration (TypeScript, Express)",
-  "main": "dist/index.js",
+  "main": "dist/exports.js",
+  "types": "dist/exports.d.ts",
+  "files": ["dist", "README.md", "LICENSE"],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build",
     "start": "node dist/index.js",
     "dev": "ts-node-dev -r dotenv/config --respawn --transpile-only src/index.ts",
     "print:db-props": "node scripts/print-db-props.js"
