@@ -161,4 +161,35 @@ If some Command creations fail, the processor:
 - Continues processing other tasks.
 - Returns `{ "ok": true, "created": X, "failed": Y }`.
 
+### GitHub Packages (publish/install)
+
+Publishing (local):
+
+```bash
+# Ensure NODE_AUTH_TOKEN is set in your shell (do not commit it).
+export NODE_AUTH_TOKEN=github_pat_...
+npm publish
+```
+
+Installing from another repo:
+
+1) Add a `.npmrc` to that repo (or CI) with:
+
+```
+@herospecs:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+```
+
+2) Install the package:
+
+```bash
+npm i @herospecs/notion-dispatch-events
+```
+
+Import example:
+
+```ts
+import { createDispatchEventsRouter } from "@herospecs/notion-dispatch-events";
+```
+
 
