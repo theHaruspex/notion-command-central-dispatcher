@@ -1,5 +1,5 @@
 {
-  "name": "@herospecs/notion-dispatch-events",
+  "name": "@theharuspex/notion-dispatch-events",
   "version": "0.1.0",
   "description": "Notion Command Central dispatcher and Objective fan-out integration (TypeScript, Express)",
   "main": "dist/exports.js",
