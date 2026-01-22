@@ -176,20 +176,20 @@ Installing from another repo:
 1) Add a `.npmrc` to that repo (or CI) with:
 
 ```
-@herospecs:registry=https://npm.pkg.github.com
+@theharuspex:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
 ```
 
 2) Install the package:
 
 ```bash
-npm i @herospecs/notion-dispatch-events
+npm i @theharuspex/notion-dispatch-events
 ```
 
 Import example:
 
 ```ts
-import { createDispatchEventsRouter } from "@herospecs/notion-dispatch-events";
+import { createDispatchEventsRouter } from "@theharuspex/notion-dispatch-events";
 ```
 
 
