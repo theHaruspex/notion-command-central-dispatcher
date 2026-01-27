@@ -8,6 +8,38 @@ interface ResolvedEventsConfig {
   statePropertyPresent: boolean;
 }
 
+export type EventsConfigCandidate = ResolvedEventsConfig;
+
+export function selectEventsConfigCandidate(
+  candidates: EventsConfigCandidate[],
+): {
+  selected: EventsConfigCandidate | null;
+  reason:
+    | "no_candidates"
+    | "single_state_present"
+    | "multi_state_present"
+    | "single_candidate_no_state"
+    | "multi_candidate_no_state";
+} {
+  if (!candidates.length) {
+    return { selected: null, reason: "no_candidates" };
+  }
+
+  const withState = candidates.filter((c) => c.statePropertyPresent);
+  if (withState.length === 1) {
+    return { selected: withState[0], reason: "single_state_present" };
+  }
+  if (withState.length > 1) {
+    return { selected: withState[0], reason: "multi_state_present" };
+  }
+
+  if (candidates.length === 1) {
+    return { selected: candidates[0], reason: "single_candidate_no_state" };
+  }
+
+  return { selected: candidates[0], reason: "multi_candidate_no_state" };
+}
+
 /**
  * Normalize an ID-like string (Notion DB IDs are often copied with dashes;
  * we normalize both webhook IDs and config IDs to avoid mismatches).
@@ -68,6 +100,8 @@ export async function resolveEventsConfigForWebhook(args: {
   // (Notion DB IDs in config rows may be stored with or without dashes, so we normalize both sides for comparison)
   let cursor: string | null | undefined = null;
 
+  const candidates: EventsConfigCandidate[] = [];
+
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const data = await queryDatabase(args.eventsConfigDbId, {
@@ -108,15 +142,29 @@ export async function resolveEventsConfigForWebhook(args: {
 
       if (!statePropertyName) continue;
       if (!workflowDefinitionId) continue;
-      return { workflowDefinitionId, statePropertyName, originDatabaseName, statePropertyPresent };
+      candidates.push({ workflowDefinitionId, statePropertyName, originDatabaseName, statePropertyPresent });
     }
 
     if (!(data as any)?.has_more || !(data as any)?.next_cursor) break;
     cursor = (data as any).next_cursor;
   }
 
-  console.log("[events:routing] no_enabled_row_for_origin_db", { originDatabaseIdKey });
-  return null;
+  const { selected, reason } = selectEventsConfigCandidate(candidates);
+  if (!selected) {
+    console.log("[events:routing] no_enabled_row_for_origin_db", { originDatabaseIdKey });
+    return null;
+  }
+
+  if (reason === "multi_state_present" || reason === "multi_candidate_no_state") {
+    console.log("[events:routing] multiple_candidate_rows_for_origin_db", {
+      originDatabaseIdKey,
+      reason,
+      state_property_names: candidates.map((c) => c.statePropertyName),
+      state_property_present_names: candidates.filter((c) => c.statePropertyPresent).map((c) => c.statePropertyName),
+    });
+  }
+
+  return selected;
 }
 
 
