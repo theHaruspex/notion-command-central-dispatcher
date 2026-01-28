@@ -161,4 +161,48 @@ If some Command creations fail, the processor:
 - Continues processing other tasks.
 - Returns `{ "ok": true, "created": X, "failed": Y }`.
 
+### GitHub Packages (publish/install)
+
+Publishing (local):
+
+```bash
+# Ensure NODE_AUTH_TOKEN is set in your shell (do not commit it).
+export NODE_AUTH_TOKEN=github_pat_...
+npm publish
+```
+
+Installing from another repo:
+
+1) Add a `.npmrc` to that repo (or CI) with:
+
+```
+@theharuspex:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+```
+
+2) Install the package:
+
+```bash
+npm i @theharuspex/notion-dispatch-events
+```
+
+Import example:
+
+```ts
+import { createDispatchEventsRouter } from "@theharuspex/notion-dispatch-events";
+```
+
+### Releases (Changesets)
+
+For changes that should be released:
+
+```bash
+npx changeset
+```
+
+Choose patch/minor/major and write a short summary.
+
+When changesets land on `main`, GitHub Actions will open or update a **Version Packages** PR.
+Merging that PR publishes the package to GitHub Packages automatically.
+
 

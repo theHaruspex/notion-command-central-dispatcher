@@ -15,8 +15,8 @@ CONFIG = {
     ],
     "output_file": "file_contents_report.txt",
     # Restrict reporting to a subdirectory of the detected project root.
-    # This repo config: only report `src/`.
-    "include_root": "src",
+    # This repo config: only report the Events app at `src/apps/events/`.
+    "include_root": "src/apps/events",
 }
 
 def find_project_root(start_path: Path) -> Path:
