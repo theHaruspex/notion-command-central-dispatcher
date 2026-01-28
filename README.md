@@ -192,4 +192,17 @@ Import example:
 import { createDispatchEventsRouter } from "@theharuspex/notion-dispatch-events";
 ```
 
+### Releases (Changesets)
+
+For changes that should be released:
+
+```bash
+npx changeset
+```
+
+Choose patch/minor/major and write a short summary.
+
+When changesets land on `main`, GitHub Actions will open or update a **Version Packages** PR.
+Merging that PR publishes the package to GitHub Packages automatically.
+
 
