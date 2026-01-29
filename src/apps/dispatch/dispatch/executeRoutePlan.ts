@@ -3,6 +3,7 @@ import type { WebhookEvent } from "../../../lib/webhook/normalizeWebhook";
 import type { RoutePlan } from "../routing/plan";
 import { createCommand } from "./createCommand";
 import { enqueueObjectiveFanoutFromOrigin } from "./fanout";
+import type { RequestContext } from "../../../lib/logging";
 
 const config = loadConfig().dispatch;
 
@@ -16,16 +17,17 @@ export interface RouteWebhookResult {
 }
 
 export async function executeRoutePlan(args: {
-  requestId: string;
+  ctx: RequestContext;
   webhookEvent: WebhookEvent;
   plan: RoutePlan;
 }): Promise<RouteWebhookResult> {
-  const { requestId, webhookEvent, plan } = args;
+  const { ctx, webhookEvent, plan } = args;
+  const dispatchCtx = ctx.withDomain("execute");
 
   if (plan.kind === "noop") {
     return {
       ok: true,
-      request_id: requestId,
+      request_id: ctx.requestId,
       fanout_applied: false,
       objective_id: null,
       matched_routes: [],
@@ -34,14 +36,12 @@ export async function executeRoutePlan(args: {
   }
 
   if (plan.kind === "fanout") {
-    // eslint-disable-next-line no-console
-    console.log("[dispatch] fanout_plan_executing", {
-      request_id: requestId,
-      origin_database_id: webhookEvent.originDatabaseId,
+    dispatchCtx.log("info", "fanout_plan_executing", {
+      origin_db: webhookEvent.originDatabaseId,
     });
 
     await enqueueObjectiveFanoutFromOrigin({
-      requestId,
+      ctx,
       originTaskId: plan.originTaskId,
       taskObjectivePropId: plan.taskObjectivePropId,
       objectiveTasksPropId: plan.objectiveTasksPropId,
@@ -50,7 +50,7 @@ export async function executeRoutePlan(args: {
 
     return {
       ok: true,
-      request_id: requestId,
+      request_id: ctx.requestId,
       fanout_applied: true,
       objective_id: null,
       matched_routes: plan.matchedRouteNames,
@@ -81,10 +81,8 @@ export async function executeRoutePlan(args: {
 
   const results = await Promise.allSettled(
     plan.matchedRouteNames.map(async (routeName) => {
-      // eslint-disable-next-line no-console
-      console.log("[dispatch] creating_origin_command", {
-        request_id: requestId,
-        routeName,
+      dispatchCtx.log("info", "creating_origin_command", {
+        route: routeName,
         directive_command_prop_key: config.commandsDirectiveCommandPropId,
       });
 
@@ -108,26 +106,23 @@ export async function executeRoutePlan(args: {
   results.forEach((r, idx) => {
     if (r.status === "fulfilled") return;
     const routeName = plan.matchedRouteNames[idx];
-    // eslint-disable-next-line no-console
-    console.error("[dispatch] create_origin_command_failed", {
-      request_id: requestId,
-      routeName,
-      error: r.reason,
+    dispatchCtx.log("error", "create_origin_command_failed", {
+      route: routeName,
+      error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+      error_stack: r.reason instanceof Error && process.env.DEBUG_STACKS === "1" ? r.reason.stack : undefined,
     });
   });
 
-  // eslint-disable-next-line no-console
-  console.log("[dispatch] origin_commands_batch_completed", {
-    request_id: requestId,
-    matchedRouteCount: plan.matchedRouteNames.length,
-    commandsCreated,
-    failedCount,
-    durationMs: Date.now() - startedAt,
+  dispatchCtx.log("info", "origin_commands_batch_completed", {
+    matched_route_count: plan.matchedRouteNames.length,
+    commands_created: commandsCreated,
+    failed_count: failedCount,
+    duration_ms: Date.now() - startedAt,
   });
 
   return {
     ok: true,
-    request_id: requestId,
+    request_id: ctx.requestId,
     fanout_applied: false,
     objective_id: null,
     matched_routes: plan.matchedRouteNames,

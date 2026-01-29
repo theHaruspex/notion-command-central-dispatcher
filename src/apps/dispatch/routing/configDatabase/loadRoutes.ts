@@ -1,6 +1,7 @@
 import { loadConfig } from "../../../../lib/config";
 import { queryDatabase } from "../../notion";
 import { normalizeNotionId } from "../../../../lib/notion/utils";
+import { createSpineLogger } from "../../../../lib/logging";
 import type {
   DispatchConfigSnapshot,
   DispatchRoute,
@@ -9,6 +10,8 @@ import type {
 } from "./types";
 
 const config = loadConfig().dispatch;
+const log = createSpineLogger({ app: "dispatch", domain: "routing:config" });
+const debugPayloads = process.env.DEBUG_PAYLOADS === "1";
 
 interface NotionPage {
   id: string;
@@ -56,9 +59,8 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
   let hasPages = false;
   let cursor: string | null | undefined;
 
-  // eslint-disable-next-line no-console
-  console.log("[routing:config] config_cache_refresh_started", {
-    dispatchConfigDbId: config.dispatchConfigDbId,
+  log.log("info", "config_cache_refresh_started", {
+    dispatch_config_db_id: config.dispatchConfigDbId,
   });
 
   // eslint-disable-next-line no-constant-condition
@@ -69,10 +71,10 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
         startCursor: cursor ?? null,
       })) as QueryResponse;
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error("[routing:config] config_cache_refresh_failed", {
-        dispatchConfigDbId: config.dispatchConfigDbId,
-        error: err,
+      log.log("error", "config_cache_refresh_failed", {
+        dispatch_config_db_id: config.dispatchConfigDbId,
+        error: err instanceof Error ? err.message : String(err),
+        error_stack: err instanceof Error && process.env.DEBUG_STACKS === "1" ? err.stack : undefined,
       });
       throw err;
     }
@@ -127,8 +129,7 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
       const title = extractTitle(props) || page.id;
       const enabled = extractCheckboxByKey(props, config.dispatchConfigEnabledPropId);
 
-      // eslint-disable-next-line no-console
-      console.log("[routing:config] config_row_evaluated", {
+      log.log("info", "config_row_evaluated", {
         page_id: page.id,
         title,
         enabled,
@@ -138,17 +139,18 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
         conditionValue,
       });
 
-      // eslint-disable-next-line no-console
-      console.log("[routing:config] config_row_properties", {
-        page_id: page.id,
-        properties: props,
-      });
+      if (debugPayloads) {
+        const preview = JSON.stringify(props);
+        log.log("info", "config_row_properties", {
+          page_id: page.id,
+          properties_preview: preview.length > 500 ? `${preview.slice(0, 500)}...` : preview,
+        });
+      }
 
       if (!enabled) continue;
 
       if (!originDatabaseId || !ruleType) {
-        // eslint-disable-next-line no-console
-        console.error("[routing:config] config_row_invalid", {
+        log.log("error", "config_row_invalid", {
           page_id: page.id,
           title,
           originDatabaseId,
@@ -192,8 +194,7 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
             : "";
 
         if (!taskObjectivePropId || !objectiveTasksPropId) {
-          // eslint-disable-next-line no-console
-          console.error("[routing:config] fanout_config_row_invalid", {
+          log.log("error", "fanout_config_row_invalid", {
             page_id: page.id,
             title,
             originDatabaseId,
@@ -223,9 +224,8 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
   }
 
   if (!hasPages) {
-    // eslint-disable-next-line no-console
-    console.warn("[routing:config] config_db_empty", {
-      dispatchConfigDbId: config.dispatchConfigDbId,
+    log.log("warn", "config_db_empty", {
+      dispatch_config_db_id: config.dispatchConfigDbId,
     });
   }
 

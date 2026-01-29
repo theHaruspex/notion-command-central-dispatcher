@@ -4,16 +4,18 @@ import type { DispatchEvent } from "./match";
 import type { WebhookEvent } from "../../../lib/webhook/normalizeWebhook";
 import type { RoutePlan } from "./plan";
 import { normalizeNotionId } from "../../../lib/notion/utils";
+import type { RequestContext } from "../../../lib/logging";
 
 export interface RouteWebhookArgs {
-  requestId: string;
+  ctx: RequestContext;
   webhookEvent: WebhookEvent;
 }
 
 export async function routeWebhookEvent(
   args: RouteWebhookArgs,
 ): Promise<RoutePlan> {
-  const { requestId, webhookEvent } = args;
+  const { ctx, webhookEvent } = args;
+  const routingCtx = ctx.withDomain("routing");
 
   const snapshot = await getDispatchConfigSnapshot();
 
@@ -25,13 +27,11 @@ export async function routeWebhookEvent(
     properties: webhookEvent.properties,
   };
 
-  const matchedRoutes = matchRoutes(dispatchEvent, snapshot.routes);
+  const matchedRoutes = matchRoutes(dispatchEvent, snapshot.routes, routingCtx);
   const matchedRouteNames = matchedRoutes.map((r) => r.routeName);
 
-  // eslint-disable-next-line no-console
-  console.log("[routing] route_plan_created", {
-    request_id: requestId,
-    origin_database_id: webhookEvent.originDatabaseId,
+  routingCtx.log("info", "route_plan_created", {
+    origin_db: webhookEvent.originDatabaseId,
     origin_page_id: webhookEvent.originPageId,
     matched_routes: matchedRouteNames,
   });

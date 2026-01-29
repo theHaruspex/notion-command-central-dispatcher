@@ -1,4 +1,5 @@
 import type { DispatchRoute } from "./configDatabase/types";
+import { createSpineLogger, type Logger } from "../../../lib/logging";
 
 export interface DispatchEvent {
   originDatabaseId: string;
@@ -38,8 +39,9 @@ function extractPropertyValue(prop: any): string | string[] | null {
   }
 }
 
-export function matchRoutes(event: DispatchEvent, routes: DispatchRoute[]): DispatchRoute[] {
+export function matchRoutes(event: DispatchEvent, routes: DispatchRoute[], logger?: Logger): DispatchRoute[] {
   const matched: DispatchRoute[] = [];
+  const log = logger ? logger.withDomain("match") : createSpineLogger({ app: "dispatch", domain: "routing:match" });
 
   for (const route of routes) {
     if (route.databaseId !== event.originDatabaseId) continue;
@@ -47,11 +49,10 @@ export function matchRoutes(event: DispatchEvent, routes: DispatchRoute[]): Disp
     const pred = route.predicate;
     if (!pred) {
       matched.push(route);
-      // eslint-disable-next-line no-console
-      console.log("[routing:match] dispatch_rule_matched", {
-        routeName: route.routeName,
-        originDatabaseId: event.originDatabaseId,
-        originPageId: event.originPageId,
+      log.log("info", "rule_matched", {
+        route: route.routeName,
+        origin_db: event.originDatabaseId,
+        origin_page_id: event.originPageId,
       });
       continue;
     }
@@ -73,11 +74,10 @@ export function matchRoutes(event: DispatchEvent, routes: DispatchRoute[]): Disp
 
       if (!matches) {
         allMatched = false;
-        // eslint-disable-next-line no-console
-        console.log("[routing:match] dispatch_rule_mismatch", {
-          routeName: route.routeName,
-          originDatabaseId: event.originDatabaseId,
-          originPageId: event.originPageId,
+        log.log("info", "rule_mismatch", {
+          route: route.routeName,
+          origin_db: event.originDatabaseId,
+          origin_page_id: event.originPageId,
           property: propName,
           expected,
           actual: extracted,
@@ -91,11 +91,10 @@ export function matchRoutes(event: DispatchEvent, routes: DispatchRoute[]): Disp
     }
 
     matched.push(route);
-    // eslint-disable-next-line no-console
-    console.log("[routing:match] dispatch_rule_matched", {
-      routeName: route.routeName,
-      originDatabaseId: event.originDatabaseId,
-      originPageId: event.originPageId,
+    log.log("info", "rule_matched", {
+      route: route.routeName,
+      origin_db: event.originDatabaseId,
+      origin_page_id: event.originPageId,
     });
   }
 

@@ -1,5 +1,6 @@
 import type { DispatchConfigSnapshot } from "./types";
 import { loadDispatchConfig } from "./loadRoutes";
+import { createSpineLogger } from "../../../../lib/logging";
 
 export type { DispatchConfigSnapshot, DispatchRoute, FanoutMapping } from "./types";
 
@@ -8,6 +9,7 @@ const TTL_MS = 60_000;
 let cachedSnapshot: DispatchConfigSnapshot | null = null;
 let lastLoadedAt = 0;
 let refreshPromise: Promise<void> | null = null;
+const log = createSpineLogger({ app: "dispatch", domain: "routing:config" });
 
 async function refreshCache(): Promise<void> {
   try {
@@ -33,11 +35,12 @@ export async function getDispatchConfigSnapshot(): Promise<DispatchConfigSnapsho
 
   // Stale-while-refresh: if TTL expired and no refresh in progress, kick off a refresh
   if (now - lastLoadedAt > TTL_MS && !refreshPromise) {
-    // eslint-disable-next-line no-console
-    console.log("[routing:config] config_cache_refresh_started_async");
+    log.log("info", "config_cache_refresh_started_async");
     refreshPromise = refreshCache().catch((err) => {
-      // eslint-disable-next-line no-console
-      console.error("[routing:config] config_cache_refresh_failed", { error: err });
+      log.log("error", "config_cache_refresh_failed", {
+        error: err instanceof Error ? err.message : String(err),
+        error_stack: err instanceof Error && process.env.DEBUG_STACKS === "1" ? err.stack : undefined,
+      });
     });
   }
 

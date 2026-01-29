@@ -20,9 +20,10 @@ export async function handleEventsWebhook(args: {
   body: unknown;
 }): Promise<any> {
   const { ctx, headers, body } = args;
+  const eventsCtx = ctx.withDomain("handler");
 
-  ctx.log("info", "webhook_received");
-  ctx.log("info", "webhook_source", { source_event_id: extractSourceEventId(body) });
+  eventsCtx.log("info", "webhook_received");
+  eventsCtx.log("info", "webhook_source", { source_event: extractSourceEventId(body) });
 
   return await enqueueEventsJob(() => processEventsWebhook({ ctx, headers, body }));
 }

@@ -21,15 +21,16 @@ export async function handleDispatchWebhook(args: {
   body: unknown;
 }): Promise<any> {
   const { ctx, headers, body } = args;
+  const dispatchCtx = ctx.withDomain("handler");
 
-  ctx.log("info", "webhook_received");
-  ctx.log("info", "webhook_source", { source_event_id: extractSourceEventId(body) });
+  dispatchCtx.log("info", "webhook_received");
+  dispatchCtx.log("info", "webhook_source", { source_event: extractSourceEventId(body) });
 
   const webhookEvent = await authenticateAndNormalizeWebhook({ headers, body });
-  const plan = await routeWebhookEvent({ requestId: ctx.requestId, webhookEvent });
-  const result = await executeRoutePlan({ requestId: ctx.requestId, webhookEvent, plan });
+  const plan = await routeWebhookEvent({ ctx, webhookEvent });
+  const result = await executeRoutePlan({ ctx, webhookEvent, plan });
 
-  ctx.log("info", "dispatch_completed", {
+  dispatchCtx.log("info", "dispatch_completed", {
     matched_routes_count: Array.isArray(result.matched_routes) ? result.matched_routes.length : 0,
     fanout_applied: result.fanout_applied,
     commands_created: result.commands_created,

@@ -11,6 +11,17 @@ function captureDirFor(appName: "dispatch" | "events"): string {
   return `${base}/${appName}`;
 }
 
+function getPayloadPreview(body: unknown, limit = 500): string {
+  try {
+    if (body === null || body === undefined) return String(body);
+    if (typeof body === "string") return body.length > limit ? `${body.slice(0, limit)}...` : body;
+    const json = JSON.stringify(body);
+    return json.length > limit ? `${json.slice(0, limit)}...` : json;
+  } catch {
+    return "[unserializable]";
+  }
+}
+
 function extractSourceEventId(body: unknown): string | null {
   try {
     if (!body || typeof body !== "object") return null;
@@ -31,24 +42,21 @@ async function handleWebhookRequest(
   const requestId = crypto.randomUUID();
   const ctx = createRequestContext({ app: appName, requestId });
   const startedAt = Date.now();
+  const httpCtx = ctx.withDomain("http");
 
   res.on("finish", () => {
-    ctx.log("info", "http_response_finished", {
+    httpCtx.log("info", "response_finished", {
       status_code: res.statusCode,
       duration_ms: Date.now() - startedAt,
-      app_name: appName,
-      request_id: requestId,
       content_length: res.getHeader("content-length"),
       headers_sent: res.headersSent,
     });
   });
 
   res.on("close", () => {
-    ctx.log("warn", "http_response_closed", {
+    httpCtx.log("warn", "response_closed", {
       status_code: res.statusCode,
       duration_ms: Date.now() - startedAt,
-      app_name: appName,
-      request_id: requestId,
       content_length: res.getHeader("content-length"),
       headers_sent: res.headersSent,
     });
@@ -67,22 +75,24 @@ async function handleWebhookRequest(
     });
 
     if (captureEnabled) {
-      ctx.log("info", "captured_webhook", { capture_dir: captureDir });
+      httpCtx.log("info", "captured_webhook", { capture_dir: captureDir });
     }
 
     const sourceEventId = extractSourceEventId(req.body);
-    ctx.log("info", "http_request_received", { source_event_id: sourceEventId });
-
-    // Preserve existing ingress visibility (still logs the body, as before).
-    // eslint-disable-next-line no-console
-    console.log(`[/webhook/${appName}] webhook_received`, {
-      request_id: requestId,
-      source_event_id: sourceEventId,
-      body: req.body,
+    httpCtx.log("info", "request_received", {
+      path: req.path,
+      method: req.method,
+      source_event: sourceEventId,
     });
 
+    if (process.env.DEBUG_PAYLOADS === "1") {
+      httpCtx
+        .withDomain("ingress")
+        .log("info", "payload_preview", { preview: getPayloadPreview(req.body) });
+    }
+
     // Acceptance: ack is sent immediately; async processing logs later.
-    ctx.log("info", "ack_sent", { app_name: appName });
+    httpCtx.log("info", "ack_sent");
     res.status(200).json({ ok: true, request_id: requestId, ack: true });
 
     void Promise.resolve().then(async () => {
@@ -92,24 +102,28 @@ async function handleWebhookRequest(
         } else {
           await handleEventsWebhook({ ctx, headers: req.headers, body: req.body });
         }
-        ctx.log("info", "async_processing_completed", {
-          app_name: appName,
+        httpCtx.log("info", "async_processing_completed", {
           duration_ms: Date.now() - ctx.startedAtMs,
         });
       } catch (err) {
         const error =
           err instanceof Error
-            ? { message: err.message, stack: err.stack }
+            ? { message: err.message, name: err.name, stack: err.stack }
             : { value: String(err) };
-        ctx.log("error", "async_processing_failed", { app_name: appName, error });
+        httpCtx.log("error", "async_processing_failed", {
+          error: error.message ?? error.value,
+          error_name: error.name,
+          error_stack: process.env.DEBUG_STACKS === "1" ? error.stack : undefined,
+        });
       }
     });
 
     return res;
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error(`[/webhook/${appName}] unexpected_error`, {
-      error: err,
+    httpCtx.log("error", "unexpected_error", {
+      error: err instanceof Error ? err.message : String(err),
+      error_name: err instanceof Error ? err.name : undefined,
+      error_stack: err instanceof Error && process.env.DEBUG_STACKS === "1" ? err.stack : undefined,
     });
     return res.status(500).json({ ok: false, error: "Internal server error" });
   }

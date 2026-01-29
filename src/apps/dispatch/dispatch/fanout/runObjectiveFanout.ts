@@ -2,6 +2,7 @@ import type { AutomationEvent, ProcessorResult } from "../../../../types";
 import { getRelationIdsFromPageProperty } from "../../notion";
 import { loadConfig } from "../../../../lib/config";
 import { createCommand } from "../createCommand";
+import type { RequestContext } from "../../../../lib/logging";
 
 const config = loadConfig().dispatch;
 
@@ -13,8 +14,12 @@ const config = loadConfig().dispatch;
  *
  * Labeling: `Directive: Command` should contain the origin event’s matched route name(s).
  */
-export async function runObjectiveFanout(args: { requestId: string; event: AutomationEvent }): Promise<ProcessorResult> {
-  const { requestId, event } = args;
+export async function runObjectiveFanout(args: {
+  ctx: RequestContext;
+  event: AutomationEvent;
+}): Promise<ProcessorResult> {
+  const { ctx, event } = args;
+  const fanoutCtx = ctx.withDomain("fanout");
   const triggerKey = config.commandTriggerKey ?? event.triggerKey;
   if (!triggerKey) {
     throw new Error(
@@ -49,34 +54,28 @@ export async function runObjectiveFanout(args: { requestId: string; event: Autom
 
   const taskIds = await getRelationIdsFromPageProperty(event.objectiveId, objectiveTasksPropId);
   if (taskIds.length > config.maxFanoutTasks) {
-    // eslint-disable-next-line no-console
-    console.warn("[fanout] task_count_exceeds_cap", {
-      request_id: requestId,
-      objectiveId: event.objectiveId,
-      originalTaskCount: taskIds.length,
-      maxFanoutTasks: config.maxFanoutTasks,
+    fanoutCtx.log("warn", "task_count_exceeds_cap", {
+      objective_id: event.objectiveId,
+      original_task_count: taskIds.length,
+      max_fanout_tasks: config.maxFanoutTasks,
     });
   }
 
   const taskIdsToProcess = taskIds.slice(0, config.maxFanoutTasks);
 
-  // eslint-disable-next-line no-console
-  console.log("[fanout] starting", {
-    request_id: requestId,
-    objectiveId: event.objectiveId,
-    triggerKey,
-    taskCount: taskIdsToProcess.length,
-    matchedRouteNamesCount: matchedRouteNames.length,
-    maxFanoutTasks: config.maxFanoutTasks,
+  fanoutCtx.log("info", "starting", {
+    objective_id: event.objectiveId,
+    trigger_key: triggerKey,
+    task_count: taskIdsToProcess.length,
+    matched_routes_count: matchedRouteNames.length,
+    max_fanout_tasks: config.maxFanoutTasks,
   });
 
   const startedAt = Date.now();
   const promises = taskIdsToProcess.map(async (taskId) => {
-    // eslint-disable-next-line no-console
-    console.log("[fanout] creating_recompute_command_for_task", {
-      request_id: requestId,
-      objectiveId: event.objectiveId,
-      taskId,
+    fanoutCtx.log("info", "creating_recompute_command_for_task", {
+      objective_id: event.objectiveId,
+      task_id: taskId,
       title: titleFromRoutes,
     });
 
@@ -100,24 +99,21 @@ export async function runObjectiveFanout(args: { requestId: string; event: Autom
   results.forEach((r, idx) => {
     if (r.status === "fulfilled") return;
     const taskId = taskIdsToProcess[idx];
-    // eslint-disable-next-line no-console
-    console.error("[fanout] create_fanout_command_failed", {
-      request_id: requestId,
-      objectiveId: event.objectiveId,
-      taskId,
+    fanoutCtx.log("error", "create_fanout_command_failed", {
+      objective_id: event.objectiveId,
+      task_id: taskId,
       title: titleFromRoutes,
-      error: r.reason,
+      error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+      error_stack: r.reason instanceof Error && process.env.DEBUG_STACKS === "1" ? r.reason.stack : undefined,
     });
   });
 
-  // eslint-disable-next-line no-console
-  console.log("[fanout] batch_completed", {
-    request_id: requestId,
-    objectiveId: event.objectiveId,
-    taskCountProcessed: taskIdsToProcess.length,
+  fanoutCtx.log("info", "batch_completed", {
+    objective_id: event.objectiveId,
+    task_count_processed: taskIdsToProcess.length,
     created,
     failed,
-    durationMs: Date.now() - startedAt,
+    duration_ms: Date.now() - startedAt,
   });
 
   return {

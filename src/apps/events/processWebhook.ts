@@ -27,16 +27,17 @@ async function timeStep<T>(
   extra?: Record<string, unknown>,
 ): Promise<T> {
   const startedAt = Date.now();
+  const stepCtx = ctx.withDomain("steps");
   try {
     const result = await fn();
-    ctx.log("info", "events_step_completed", {
+    stepCtx.log("info", "completed", {
       step,
       duration_ms: Date.now() - startedAt,
       ...(extra ?? {}),
     });
     return result;
   } catch (err) {
-    ctx.log("error", "events_step_failed", {
+    stepCtx.log("error", "failed", {
       step,
       duration_ms: Date.now() - startedAt,
       error: err instanceof Error ? err.message : String(err),
@@ -52,6 +53,7 @@ export async function processEventsWebhook(args: {
   body: unknown;
 }): Promise<any> {
   const { ctx, headers, body } = args;
+  const eventsCtx = ctx.withDomain("processing");
 
   // 1) load runtime config
   const cfg = loadEventsRuntimeConfig();
@@ -81,29 +83,31 @@ export async function processEventsWebhook(args: {
     "resolve_routing",
     () =>
       resolveEventsConfigForWebhook({
+        ctx,
         eventsConfigDbId: cfg.eventsConfigDbId,
         originDatabaseId: originDatabaseIdKey,
         webhookProperties: webhookEvent.properties,
       }),
-    { origin_database_id: originDatabaseIdKey },
+    { origin_db: originDatabaseIdKey, origin_page: originPageName, origin_page_id: originPageIdKey },
   );
 
   if (!resolved) {
-    ctx.log("warn", "skipped_no_matching_events_config", {
-      origin_database_id: originDatabaseIdKey,
-      origin_database_id_key: originDatabaseIdKey,
-      origin_database_id_raw: webhookEvent.originDatabaseId,
+    eventsCtx.log("warn", "skipped_no_matching_events_config", {
+      origin_db: originDatabaseIdKey,
+      origin_db_raw: webhookEvent.originDatabaseId,
       origin_page_id: originPageIdKey,
+      origin_page: originPageName,
       webhook_property_keys_count: Object.keys(webhookEvent.properties).length,
     });
     return { ok: true, request_id: ctx.requestId, skipped: true, reason: "no_matching_events_config" };
   }
 
   if (!resolved.statePropertyPresent) {
-    ctx.log("warn", "matched_events_config_but_state_property_missing_in_payload", {
+    eventsCtx.log("warn", "matched_events_config_but_state_property_missing_in_payload", {
       workflow_definition_id: resolved.workflowDefinitionId,
-      origin_database_id: originDatabaseIdKey,
+      origin_db: originDatabaseIdKey,
       origin_page_id: originPageIdKey,
+      origin_page: originPageName,
       state_property_name: resolved.statePropertyName,
       webhook_property_keys_sample: Object.keys(webhookEvent.properties).slice(0, 10),
     });
@@ -115,10 +119,11 @@ export async function processEventsWebhook(args: {
   );
 
   if (!def.enabled) {
-    ctx.log("info", "skipped_workflow_definition_disabled", {
+    eventsCtx.log("info", "skipped_workflow_definition_disabled", {
       workflow_definition_id: resolved.workflowDefinitionId,
-      origin_database_id: originDatabaseIdKey,
+      origin_db: originDatabaseIdKey,
       origin_page_id: originPageIdKey,
+      origin_page: originPageName,
     });
     return { ok: true, request_id: ctx.requestId, skipped: true, reason: "workflow_definition_disabled" };
   }
@@ -126,9 +131,10 @@ export async function processEventsWebhook(args: {
   // 6) extract state value (and validate missing/empty exactly as before)
   const stateValueOrNull = extractStateValueFromWebhookProperties(webhookEvent.properties, resolved.statePropertyName);
   if (stateValueOrNull === null) {
-    ctx.log("warn", "skipped_state_property_missing", {
-      origin_database_id: originDatabaseIdKey,
+    eventsCtx.log("warn", "skipped_state_property_missing", {
+      origin_db: originDatabaseIdKey,
       origin_page_id: originPageIdKey,
+      origin_page: originPageName,
       state_property_name: resolved.statePropertyName,
     });
     return { ok: true, request_id: ctx.requestId, skipped: true, reason: "state_property_missing" };
@@ -136,9 +142,10 @@ export async function processEventsWebhook(args: {
 
   const stateValue = stateValueOrNull;
   if (!stateValue) {
-    ctx.log("warn", "skipped_no_state_value", {
-      origin_database_id: originDatabaseIdKey,
+    eventsCtx.log("warn", "skipped_no_state_value", {
+      origin_db: originDatabaseIdKey,
       origin_page_id: originPageIdKey,
+      origin_page: originPageName,
       state_property_name: resolved.statePropertyName,
     });
     return { ok: true, request_id: ctx.requestId, skipped: true, reason: "no_state_value" };
@@ -155,19 +162,21 @@ export async function processEventsWebhook(args: {
     );
   } catch (err) {
     if (err instanceof ContainerPropertyNotConfiguredError) {
-      ctx.log("warn", "skipped_container_property_not_configured", {
+      eventsCtx.log("warn", "skipped_container_property_not_configured", {
         workflow_definition_id: resolved.workflowDefinitionId,
-        origin_database_id: originDatabaseIdKey,
+        origin_db: originDatabaseIdKey,
         origin_page_id: originPageIdKey,
+        origin_page: originPageName,
       });
       return { ok: true, request_id: ctx.requestId, skipped: true, reason: "container_property_not_configured" };
     }
     if (err instanceof ContainerRelationMissingError) {
-      ctx.log("warn", "skipped_container_relation_missing", {
+      eventsCtx.log("warn", "skipped_container_relation_missing", {
         container_property_name: def.containerPropertyName,
         workflow_definition_id: resolved.workflowDefinitionId,
-        origin_database_id: originDatabaseIdKey,
+        origin_db: originDatabaseIdKey,
         origin_page_id: originPageIdKey,
+        origin_page: originPageName,
       });
       return { ok: true, request_id: ctx.requestId, skipped: true, reason: "container_relation_missing" };
     }
@@ -185,7 +194,7 @@ export async function processEventsWebhook(args: {
   // 8) dedupe decision
   const duplicate = await timeStep(ctx, "dedupe_event", () => isDuplicateEvent(cfg.eventsDbId, eventUid));
   if (duplicate) {
-    ctx.log("info", "event_deduped", { event_uid: eventUid, attempt });
+    eventsCtx.log("info", "event_deduped", { event_uid: eventUid, attempt, origin_page: originPageName });
     return { ok: true, request_id: ctx.requestId, deduped: true };
   }
 
@@ -221,7 +230,11 @@ export async function processEventsWebhook(args: {
   if (def.workflowType === "multi_object") {
     logFields.container_property_name = def.containerPropertyName;
   }
-  ctx.log(ensure.created ? "info" : "info", ensure.created ? "workflow_record_created" : "workflow_record_reused", logFields);
+  eventsCtx.log(
+    ensure.created ? "info" : "info",
+    ensure.created ? "workflow_record_created" : "workflow_record_reused",
+    { ...logFields, origin_page: originPageName },
+  );
 
   // 10) write event log entry
   await timeStep(ctx, "write_event_log_entry", () =>
@@ -258,11 +271,12 @@ export async function processEventsWebhook(args: {
   );
 
   // 12) log event_created and return the same response object
-  ctx.log("info", "event_created", {
+  eventsCtx.log("info", "event_created", {
     event_uid: eventUid,
     workflow_record_id: ensure.workflowRecordId,
-    origin_database_id: originDatabaseIdKey,
+    origin_db: originDatabaseIdKey,
     origin_page_id: originPageIdKey,
+    origin_page: originPageName,
     state_property_name: resolved.statePropertyName,
     state_value: stateValue,
     workflow_step_id: workflowStepId,

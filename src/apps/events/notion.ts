@@ -1,6 +1,7 @@
 import { loadConfig } from "../../lib/config";
 import { createNotionClientPool } from "../../lib/notion/clientPool";
 import { createNotionApi } from "../../lib/notion/api";
+import { createSpineLogger } from "../../lib/logging";
 
 let api: ReturnType<typeof createNotionApi> | null = null;
 
@@ -8,10 +9,12 @@ function getApi(): ReturnType<typeof createNotionApi> {
   if (api) return api;
 
   const config = loadConfig();
+  const logger = createSpineLogger({ app: "events", domain: "notion" });
   const pool = createNotionClientPool({
     name: "events",
     tokens: config.events.notionTokens,
     notionVersion: config.notionVersion,
+    logger,
   });
 
   api = createNotionApi((options) => pool.request(options));

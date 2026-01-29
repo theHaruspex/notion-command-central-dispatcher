@@ -1,6 +1,7 @@
 import type { AutomationEvent } from "../../../../types";
 import { runObjectiveFanout } from "./runObjectiveFanout";
 import { getSingleRelationIdFromPageProperty } from "../../notion";
+import type { RequestContext } from "../../../../lib/logging";
 
 type ObjectiveId = string;
 
@@ -19,40 +20,45 @@ function getState(objectiveId: ObjectiveId): ObjectiveState {
   return state;
 }
 
-async function runForObjective(objectiveId: ObjectiveId, requestId: string, event: AutomationEvent): Promise<void> {
+async function runForObjective(
+  objectiveId: ObjectiveId,
+  ctx: RequestContext,
+  event: AutomationEvent,
+): Promise<void> {
   const state = getState(objectiveId);
+  const fanoutCtx = ctx.withDomain("fanout");
 
-  // eslint-disable-next-line no-console
-  console.log("[fanout] run_started", { request_id: requestId, objectiveId });
+  fanoutCtx.log("info", "run_started", { objective_id: objectiveId });
 
   try {
-    await runObjectiveFanout({ requestId, event: { ...event, objectiveId } });
+    await runObjectiveFanout({ ctx, event: { ...event, objectiveId } });
   } catch (err) {
-    // eslint-disable-next-line no-console
-    console.error("[fanout] run_failed", { request_id: requestId, objectiveId, error: err });
+    fanoutCtx.log("error", "run_failed", {
+      objective_id: objectiveId,
+      error: err instanceof Error ? err.message : String(err),
+      error_stack: err instanceof Error && process.env.DEBUG_STACKS === "1" ? err.stack : undefined,
+    });
   } finally {
     state.inFlight = false;
-    // eslint-disable-next-line no-console
-    console.log("[fanout] run_completed", { request_id: requestId, objectiveId });
+    fanoutCtx.log("info", "run_completed", { objective_id: objectiveId });
   }
 }
 
 export async function enqueueObjectiveFanoutFromOrigin(args: {
-  requestId: string;
+  ctx: RequestContext;
   originTaskId: string;
   taskObjectivePropId: string;
   objectiveTasksPropId: string;
   matchedRouteNames: string[];
 }): Promise<void> {
-  const { requestId, originTaskId, taskObjectivePropId, objectiveTasksPropId, matchedRouteNames } = args;
+  const { ctx, originTaskId, taskObjectivePropId, objectiveTasksPropId, matchedRouteNames } = args;
+  const fanoutCtx = ctx.withDomain("fanout");
 
   const objectiveId = await getSingleRelationIdFromPageProperty(originTaskId, taskObjectivePropId);
   if (!objectiveId) {
-    // eslint-disable-next-line no-console
-    console.warn("[fanout] objective_not_found_for_task", {
-      request_id: requestId,
-      originTaskId,
-      taskObjectivePropId,
+    fanoutCtx.log("warn", "objective_not_found_for_task", {
+      origin_task_id: originTaskId,
+      task_objective_prop_id: taskObjectivePropId,
     });
     return;
   }
@@ -60,8 +66,7 @@ export async function enqueueObjectiveFanoutFromOrigin(args: {
   const state = getState(objectiveId);
 
   if (state.inFlight) {
-    // eslint-disable-next-line no-console
-    console.log("[fanout] objective_run_skipped_in_flight", { request_id: requestId, objectiveId });
+    fanoutCtx.log("info", "objective_run_skipped_in_flight", { objective_id: objectiveId });
     return;
   }
 
@@ -74,7 +79,7 @@ export async function enqueueObjectiveFanoutFromOrigin(args: {
     matchedRouteNames,
   };
 
-  void runForObjective(objectiveId, requestId, event);
+  void runForObjective(objectiveId, ctx, event);
 }
 
 export { runObjectiveFanout } from "./runObjectiveFanout";

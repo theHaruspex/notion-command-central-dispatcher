@@ -18,10 +18,14 @@ export interface NotionRequestOptions {
   extraHeaders?: HeadersInit;
 }
 
-export function createNotionClient(args: { token: string; notionVersion: string }): {
+export function createNotionClient(args: {
+  token: string;
+  notionVersion: string;
+  logger?: { log: (level: "info" | "warn" | "error", event: string, fields?: Record<string, unknown>) => void };
+}): {
   request(options: NotionRequestOptions): Promise<Response>;
 } {
-  const { token, notionVersion } = args;
+  const { token, notionVersion, logger } = args;
 
   const queue: QueueItem[] = [];
   let isWorkerRunning = false;
@@ -64,11 +68,10 @@ export function createNotionClient(args: { token: string; notionVersion: string 
 
       if ((response.status === 429 || response.status >= 500) && attempt < MAX_RETRIES) {
         const delayMs = 2 ** (attempt - 1) * 500;
-        // eslint-disable-next-line no-console
-        console.warn("[notion:request] transient error, will retry", {
+        logger?.log("warn", "transient_retry", {
           status: response.status,
           attempt,
-          delayMs,
+          delay_ms: delayMs,
         });
         await new Promise((r) => setTimeout(r, delayMs));
         return doFetchWithRetry(input, init, attempt + 1);
@@ -78,11 +81,10 @@ export function createNotionClient(args: { token: string; notionVersion: string 
     } catch (err) {
       const isAbortError = err instanceof Error && err.name === "AbortError";
       if (isAbortError) {
-        // eslint-disable-next-line no-console
-        console.warn("[notion:request] timeout", {
+        logger?.log("warn", "timeout", {
           status: "timeout",
           attempt,
-          timeoutMs: REQUEST_TIMEOUT_MS,
+          timeout_ms: REQUEST_TIMEOUT_MS,
           method: init.method,
           input: typeof input === "string" ? input : input.toString(),
         });
@@ -118,8 +120,7 @@ export function createNotionClient(args: { token: string; notionVersion: string 
         },
       };
 
-      // eslint-disable-next-line no-console
-      console.log("[notion:request] enqueue", { method: mergedInit.method, path });
+      logger?.log("info", "enqueue", { method: mergedInit.method, path });
 
       return enqueue(() => doFetchWithRetry(url, mergedInit));
     },

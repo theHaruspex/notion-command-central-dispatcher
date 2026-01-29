@@ -1,5 +1,6 @@
 import { queryDatabase } from "../notion";
 import { normalizeNotionId } from "../../../lib/notion/utils";
+import type { RequestContext } from "../../../lib/logging";
 
 interface ResolvedEventsConfig {
   workflowDefinitionId: string;
@@ -86,13 +87,15 @@ function readRelationFirstId(props: Record<string, any>, name: string): string |
 }
 
 export async function resolveEventsConfigForWebhook(args: {
+  ctx: RequestContext;
   eventsConfigDbId: string;
   originDatabaseId: string;
   webhookProperties: Record<string, any>;
 }): Promise<ResolvedEventsConfig | null> {
   const originDatabaseIdKey = normalizeIdLike(args.originDatabaseId);
-  console.log("[events:routing] start", {
-    originDatabaseIdKey,
+  const routingCtx = args.ctx.withDomain("routing");
+  routingCtx.log("info", "start", {
+    origin_db: originDatabaseIdKey,
     webhook_property_keys_count: Object.keys(args.webhookProperties).length,
   });
 
@@ -132,12 +135,12 @@ export async function resolveEventsConfigForWebhook(args: {
       const workflowDefinitionId = readRelationFirstId(props, "Workflow Definition");
       const originDatabaseName = readTitleAsPlain(props, "Origin Database Name");
 
-      console.log("[events:routing] candidate_row", {
+      routingCtx.log("info", "candidate_row", {
         ...(typeof (row as any)?.id === "string" ? { page_id: (row as any).id } : {}),
-        statePropertyName,
-        statePropertyPresent,
-        hasWorkflowDefinitionId: !!workflowDefinitionId,
-        originDatabaseName,
+        state_property: statePropertyName,
+        state_property_present: statePropertyPresent,
+        has_workflow_definition: !!workflowDefinitionId,
+        origin_db_name: originDatabaseName,
       });
 
       if (!statePropertyName) continue;
@@ -151,16 +154,16 @@ export async function resolveEventsConfigForWebhook(args: {
 
   const { selected, reason } = selectEventsConfigCandidate(candidates);
   if (!selected) {
-    console.log("[events:routing] no_enabled_row_for_origin_db", { originDatabaseIdKey });
+    routingCtx.log("warn", "no_matching_config", { origin_db: originDatabaseIdKey });
     return null;
   }
 
   if (reason === "multi_state_present" || reason === "multi_candidate_no_state") {
-    console.log("[events:routing] multiple_candidate_rows_for_origin_db", {
-      originDatabaseIdKey,
+    routingCtx.log("warn", "multiple_candidates", {
+      origin_db: originDatabaseIdKey,
       reason,
-      state_property_names: candidates.map((c) => c.statePropertyName),
-      state_property_present_names: candidates.filter((c) => c.statePropertyPresent).map((c) => c.statePropertyName),
+      state_properties: candidates.map((c) => c.statePropertyName),
+      state_properties_present: candidates.filter((c) => c.statePropertyPresent).map((c) => c.statePropertyName),
     });
   }
 
