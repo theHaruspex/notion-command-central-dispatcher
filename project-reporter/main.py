@@ -5,7 +5,7 @@ from pathlib import Path
 # CONFIGURATION
 CONFIG = {
     "exclude_paths": [
-        "node_modules", "dist", ".git", "__pycache__", "prompts", ".idea", ".vscode", "logs", "tmp", "project-reporter", "dispatch",
+        "node_modules", "dist", ".git", "__pycache__", "prompts", ".idea", ".vscode", "logs", "tmp", "project-reporter",
     ],
     "exclude_extensions": [
         ".pyc", ".log", ".DS_Store", ".env", ".example", ".json",
@@ -15,8 +15,8 @@ CONFIG = {
     ],
     "output_file": "file_contents_report.txt",
     # Restrict reporting to a subdirectory of the detected project root.
-    # This repo config: only report the Events app at `src/apps/events/`.
-    "include_root": "src/apps/events",
+    # This repo config: report everything under `src/`.
+    "include_root": "src",
 }
 
 def find_project_root(start_path: Path) -> Path:
