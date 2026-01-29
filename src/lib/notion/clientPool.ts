@@ -13,28 +13,28 @@ export function createNotionClientPool(args: {
 }): NotionClientPool {
   const { name, tokens, notionVersion } = args;
   const baseLogger = args.logger ?? createSpineLogger({ app: name, domain: "notion" });
-  const poolLogger = baseLogger.withDomain("pool");
-  const requestLogger = baseLogger.withDomain("request");
 
   if (!Array.isArray(tokens) || tokens.length === 0) {
     throw new Error(`Notion client pool '${name}' must be initialized with at least one token`);
   }
 
-  const clients = tokens.map((token) =>
-    createNotionClient({ token, notionVersion, logger: requestLogger }),
-  );
+  const clients = tokens.map((token) => createNotionClient({ token, notionVersion }));
   let cursor = 0;
 
-  poolLogger.log("info", "initialized", { name, pool_size: clients.length });
+  baseLogger.withDomain("pool").log("info", "initialized", { name, pool_size: clients.length });
 
   return {
     async request(options: NotionRequestOptions): Promise<Response> {
       const idx = cursor % clients.length;
       cursor += 1;
 
-      poolLogger.log("info", "selected_client", { name, idx, pool_size: clients.length });
+      const logger = options.logger ?? baseLogger;
+      logger.withDomain("pool").log("info", "selected_client", { name, idx, pool_size: clients.length });
 
-      return clients[idx].request(options);
+      return clients[idx].request({
+        ...options,
+        logger: logger.withDomain("request"),
+      });
     },
   };
 }

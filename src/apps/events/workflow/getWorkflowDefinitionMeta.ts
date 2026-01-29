@@ -1,4 +1,5 @@
 import { getPage } from "../notion";
+import type { RequestContext } from "../../../lib/logging";
 
 export type WorkflowType = "single_object" | "multi_object";
 
@@ -32,8 +33,11 @@ function readRichTextAsPlain(props: Record<string, any>, name: string): string {
   return "";
 }
 
-export async function getWorkflowDefinitionMeta(workflowDefinitionId: string): Promise<WorkflowDefinitionMeta> {
-  const page = await getPage(workflowDefinitionId);
+export async function getWorkflowDefinitionMeta(
+  ctx: RequestContext,
+  workflowDefinitionId: string,
+): Promise<WorkflowDefinitionMeta> {
+  const page = await getPage(ctx, workflowDefinitionId);
 
   const workflowStepsPropId = (page.properties as any)?.["Workflow Steps"]?.id;
   if (typeof workflowStepsPropId !== "string" || !workflowStepsPropId) {

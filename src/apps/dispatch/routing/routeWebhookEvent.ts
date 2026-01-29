@@ -17,7 +17,7 @@ export async function routeWebhookEvent(
   const { ctx, webhookEvent } = args;
   const routingCtx = ctx.withDomain("routing");
 
-  const snapshot = await getDispatchConfigSnapshot();
+  const snapshot = await getDispatchConfigSnapshot(ctx);
 
   const originDatabaseIdKey = normalizeNotionId(webhookEvent.originDatabaseId);
 

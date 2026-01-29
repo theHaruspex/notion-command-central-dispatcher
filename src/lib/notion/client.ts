@@ -1,3 +1,5 @@
+import type { Logger } from "../logging";
+
 const NOTION_BASE_URL = "https://api.notion.com/v1";
 const MAX_REQUESTS_PER_SECOND = 3;
 const MAX_RETRIES = 3;
@@ -16,16 +18,13 @@ export interface NotionRequestOptions {
   method?: string;
   body?: unknown;
   extraHeaders?: HeadersInit;
+  logger?: Logger;
 }
 
-export function createNotionClient(args: {
-  token: string;
-  notionVersion: string;
-  logger?: { log: (level: "info" | "warn" | "error", event: string, fields?: Record<string, unknown>) => void };
-}): {
+export function createNotionClient(args: { token: string; notionVersion: string }): {
   request(options: NotionRequestOptions): Promise<Response>;
 } {
-  const { token, notionVersion, logger } = args;
+  const { token, notionVersion } = args;
 
   const queue: QueueItem[] = [];
   let isWorkerRunning = false;
@@ -59,7 +58,12 @@ export function createNotionClient(args: {
     });
   }
 
-  async function doFetchWithRetry(input: RequestInfo | URL, init: RequestInit, attempt = 1): Promise<Response> {
+  async function doFetchWithRetry(
+    input: RequestInfo | URL,
+    init: RequestInit,
+    attempt = 1,
+    logger?: Logger,
+  ): Promise<Response> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     const requestInit: RequestInit = { ...init, signal: controller.signal };
@@ -74,7 +78,7 @@ export function createNotionClient(args: {
           delay_ms: delayMs,
         });
         await new Promise((r) => setTimeout(r, delayMs));
-        return doFetchWithRetry(input, init, attempt + 1);
+        return doFetchWithRetry(input, init, attempt + 1, logger);
       }
 
       return response;
@@ -86,12 +90,12 @@ export function createNotionClient(args: {
           attempt,
           timeout_ms: REQUEST_TIMEOUT_MS,
           method: init.method,
-          input: typeof input === "string" ? input : input.toString(),
+          notion_url: typeof input === "string" ? input : input.toString(),
         });
         if (attempt < MAX_RETRIES) {
           const delayMs = 2 ** (attempt - 1) * 500;
           await new Promise((r) => setTimeout(r, delayMs));
-          return doFetchWithRetry(input, init, attempt + 1);
+          return doFetchWithRetry(input, init, attempt + 1, logger);
         }
       }
       throw err;
@@ -103,6 +107,7 @@ export function createNotionClient(args: {
   return {
     async request(options: NotionRequestOptions): Promise<Response> {
       const { path, method, body, extraHeaders } = options;
+      const initLogger = options.logger;
 
       const url = `${NOTION_BASE_URL}${path}`;
       const headers: HeadersInit = {
@@ -120,9 +125,9 @@ export function createNotionClient(args: {
         },
       };
 
-      logger?.log("info", "enqueue", { method: mergedInit.method, path });
+      initLogger?.log("info", "enqueue", { method: mergedInit.method, notion_path: path });
 
-      return enqueue(() => doFetchWithRetry(url, mergedInit));
+      return enqueue(() => doFetchWithRetry(url, mergedInit, 1, initLogger));
     },
   };
 }

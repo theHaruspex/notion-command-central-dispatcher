@@ -23,7 +23,7 @@ export async function handleEventsWebhook(args: {
   const eventsCtx = ctx.withDomain("handler");
 
   eventsCtx.log("info", "webhook_received");
-  eventsCtx.log("info", "webhook_source", { source_event: extractSourceEventId(body) });
+  eventsCtx.log("info", "webhook_source", { source_event_id: extractSourceEventId(body) });
 
   return await enqueueEventsJob(() => processEventsWebhook({ ctx, headers, body }));
 }

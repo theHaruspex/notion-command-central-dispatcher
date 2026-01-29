@@ -107,7 +107,7 @@ export async function resolveEventsConfigForWebhook(args: {
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const data = await queryDatabase(args.eventsConfigDbId, {
+    const data = await queryDatabase(args.ctx, args.eventsConfigDbId, {
       body: {
         filter: {
           property: "Enabled",

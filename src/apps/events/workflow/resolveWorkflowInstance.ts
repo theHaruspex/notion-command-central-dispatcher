@@ -5,6 +5,7 @@ import { extractFirstRelationIdFromWebhookProperties } from "../ingest/extractRe
 import { extractTitleFromWebhookProperties } from "../ingest/extractTitleFromProps";
 import type { WorkflowDefinitionMeta } from "./getWorkflowDefinitionMeta";
 import type { WorkflowInstance } from "../domain";
+import type { RequestContext } from "../../../lib/logging";
 
 export class ContainerPropertyNotConfiguredError extends Error {
   constructor() {
@@ -21,11 +22,12 @@ export class ContainerRelationMissingError extends Error {
 }
 
 export async function resolveWorkflowInstance(args: {
+  ctx: RequestContext;
   def: WorkflowDefinitionMeta;
   webhookEvent: WebhookEvent;
   originPageName: string;
 }): Promise<WorkflowInstance> {
-  const { def, webhookEvent, originPageName } = args;
+  const { ctx, def, webhookEvent, originPageName } = args;
 
   if (def.workflowType === "single_object") {
     const workflowInstancePageId = webhookEvent.originPageId;
@@ -46,7 +48,7 @@ export async function resolveWorkflowInstance(args: {
     throw new ContainerRelationMissingError();
   }
 
-  const instancePage = await getPage(containerId);
+  const instancePage = await getPage(ctx, containerId);
   const workflowInstancePageName = extractTitleFromWebhookProperties(instancePage.properties);
 
   return {

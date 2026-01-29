@@ -54,7 +54,7 @@ export async function enqueueObjectiveFanoutFromOrigin(args: {
   const { ctx, originTaskId, taskObjectivePropId, objectiveTasksPropId, matchedRouteNames } = args;
   const fanoutCtx = ctx.withDomain("fanout");
 
-  const objectiveId = await getSingleRelationIdFromPageProperty(originTaskId, taskObjectivePropId);
+  const objectiveId = await getSingleRelationIdFromPageProperty(ctx, originTaskId, taskObjectivePropId);
   if (!objectiveId) {
     fanoutCtx.log("warn", "objective_not_found_for_task", {
       origin_task_id: originTaskId,

@@ -2,6 +2,7 @@ import { loadConfig } from "../../../../lib/config";
 import { queryDatabase } from "../../notion";
 import { normalizeNotionId } from "../../../../lib/notion/utils";
 import { createSpineLogger } from "../../../../lib/logging";
+import type { RequestContext } from "../../../../lib/logging";
 import type {
   DispatchConfigSnapshot,
   DispatchRoute,
@@ -10,7 +11,6 @@ import type {
 } from "./types";
 
 const config = loadConfig().dispatch;
-const log = createSpineLogger({ app: "dispatch", domain: "routing:config" });
 const debugPayloads = process.env.DEBUG_PAYLOADS === "1";
 
 interface NotionPage {
@@ -49,11 +49,12 @@ function extractCheckboxByKey(props: Record<string, any>, key: string | null): b
   return false;
 }
 
-export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
+export async function loadDispatchConfig(ctx?: RequestContext): Promise<DispatchConfigSnapshot> {
   if (!config.dispatchConfigDbId) {
     throw new Error("DISPATCH_CONFIG_DB_ID is not configured");
   }
 
+  const log = ctx ? ctx.withDomain("routing:config") : createSpineLogger({ app: "dispatch", domain: "routing:config" });
   const routes: DispatchRoute[] = [];
   const fanoutMappings: FanoutMapping[] = [];
   let hasPages = false;
@@ -67,7 +68,7 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
   while (true) {
     let data: QueryResponse;
     try {
-      data = (await queryDatabase(config.dispatchConfigDbId, {
+      data = (await queryDatabase(ctx, config.dispatchConfigDbId, {
         startCursor: cursor ?? null,
       })) as QueryResponse;
     } catch (err) {
@@ -133,10 +134,10 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
         page_id: page.id,
         title,
         enabled,
-        originDatabaseId: originDatabaseIdRaw,
-        ruleType,
-        conditionPropertyName,
-        conditionValue,
+        origin_database_id: originDatabaseIdRaw,
+        rule_type: ruleType,
+        condition_property_name: conditionPropertyName,
+        condition_value: conditionValue,
       });
 
       if (debugPayloads) {
@@ -153,8 +154,8 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
         log.log("error", "config_row_invalid", {
           page_id: page.id,
           title,
-          originDatabaseId,
-          ruleType,
+          origin_database_id: originDatabaseId,
+          rule_type: ruleType,
         });
         continue;
       }
@@ -197,9 +198,9 @@ export async function loadDispatchConfig(): Promise<DispatchConfigSnapshot> {
           log.log("error", "fanout_config_row_invalid", {
             page_id: page.id,
             title,
-            originDatabaseId,
-            taskObjectivePropId,
-            objectiveTasksPropId,
+            origin_database_id: originDatabaseId,
+            task_objective_prop_id: taskObjectivePropId,
+            objective_tasks_prop_id: objectiveTasksPropId,
           });
           continue;
         }

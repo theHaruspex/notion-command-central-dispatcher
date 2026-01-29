@@ -1,6 +1,7 @@
 import type { DispatchConfigSnapshot } from "./types";
 import { loadDispatchConfig } from "./loadRoutes";
 import { createSpineLogger } from "../../../../lib/logging";
+import type { RequestContext } from "../../../../lib/logging";
 
 export type { DispatchConfigSnapshot, DispatchRoute, FanoutMapping } from "./types";
 
@@ -11,9 +12,9 @@ let lastLoadedAt = 0;
 let refreshPromise: Promise<void> | null = null;
 const log = createSpineLogger({ app: "dispatch", domain: "routing:config" });
 
-async function refreshCache(): Promise<void> {
+async function refreshCache(ctx?: RequestContext): Promise<void> {
   try {
-    const snapshot = await loadDispatchConfig();
+    const snapshot = await loadDispatchConfig(ctx);
     cachedSnapshot = snapshot;
     lastLoadedAt = Date.now();
   } finally {
@@ -21,12 +22,13 @@ async function refreshCache(): Promise<void> {
   }
 }
 
-export async function getDispatchConfigSnapshot(): Promise<DispatchConfigSnapshot> {
+export async function getDispatchConfigSnapshot(ctx?: RequestContext): Promise<DispatchConfigSnapshot> {
   const now = Date.now();
+  const logCtx = ctx ? ctx.withDomain("routing:config") : log;
 
   // Cold start: block until we have a cache
   if (!cachedSnapshot) {
-    await refreshCache();
+    await refreshCache(ctx);
     if (!cachedSnapshot) {
       throw new Error("Failed to load dispatch config");
     }
@@ -35,9 +37,9 @@ export async function getDispatchConfigSnapshot(): Promise<DispatchConfigSnapsho
 
   // Stale-while-refresh: if TTL expired and no refresh in progress, kick off a refresh
   if (now - lastLoadedAt > TTL_MS && !refreshPromise) {
-    log.log("info", "config_cache_refresh_started_async");
-    refreshPromise = refreshCache().catch((err) => {
-      log.log("error", "config_cache_refresh_failed", {
+    logCtx.log("info", "config_cache_refresh_started_async");
+    refreshPromise = refreshCache(ctx).catch((err) => {
+      logCtx.log("error", "config_cache_refresh_failed", {
         error: err instanceof Error ? err.message : String(err),
         error_stack: err instanceof Error && process.env.DEBUG_STACKS === "1" ? err.stack : undefined,
       });

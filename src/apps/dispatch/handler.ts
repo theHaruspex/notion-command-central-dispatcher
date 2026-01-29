@@ -24,7 +24,7 @@ export async function handleDispatchWebhook(args: {
   const dispatchCtx = ctx.withDomain("handler");
 
   dispatchCtx.log("info", "webhook_received");
-  dispatchCtx.log("info", "webhook_source", { source_event: extractSourceEventId(body) });
+  dispatchCtx.log("info", "webhook_source", { source_event_id: extractSourceEventId(body) });
 
   const webhookEvent = await authenticateAndNormalizeWebhook({ headers, body });
   const plan = await routeWebhookEvent({ ctx, webhookEvent });

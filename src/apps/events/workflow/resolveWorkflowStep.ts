@@ -1,6 +1,7 @@
 import type { WebhookEvent } from "../../../lib/webhook/normalizeWebhook";
 import type { WorkflowDefinitionMeta } from "./getWorkflowDefinitionMeta";
 import { getRelationIdsFromPageProperty, getPage } from "../notion";
+import type { RequestContext } from "../../../lib/logging";
 
 function readTitlePlain(props: Record<string, any>, name: string): string {
   const p = props[name];
@@ -32,13 +33,14 @@ function readNumber(props: Record<string, any>, name: string): number | null {
 }
 
 export async function resolveWorkflowStepId(args: {
+  ctx: RequestContext;
   def: WorkflowDefinitionMeta;
   webhookEvent: WebhookEvent;
   stateValue: string;
 }): Promise<{ workflowStepId: string | null; resolveMode: "scan_relation" | "match_state_value" | "none" }> {
-  const { def, webhookEvent, stateValue } = args;
+  const { ctx, def, webhookEvent, stateValue } = args;
 
-  const stepIds = await getRelationIdsFromPageProperty(def.id, def.workflowStepsPropId);
+  const stepIds = await getRelationIdsFromPageProperty(ctx, def.id, def.workflowStepsPropId);
   const stepIdSet = new Set(stepIds.map((s) => s));
 
   if (def.workflowType === "multi_object") {
@@ -56,7 +58,7 @@ export async function resolveWorkflowStepId(args: {
   }
 
   for (const stepId of stepIds) {
-    const stepPage = await getPage(stepId);
+    const stepPage = await getPage(ctx, stepId);
     const labelTitle = readTitlePlain(stepPage.properties, "Label Name");
     const label = labelTitle || readRichTextPlain(stepPage.properties, "Label Name");
     const n = readNumber(stepPage.properties, "Workflow Step");

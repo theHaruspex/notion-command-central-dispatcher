@@ -1,8 +1,10 @@
 import { normalizeNotionId } from "../../../lib/notion/utils";
 import { createPage, queryDatabase } from "../notion";
+import type { RequestContext } from "../../../lib/logging";
 import { dateIso, rt, title, urlValue } from "../util/notionProps";
 
 export interface EnsureWorkflowRecordArgs {
+  ctx: RequestContext;
   workflowRecordsDbId: string;
   workflowDefinitionId: string;
 
@@ -25,7 +27,7 @@ export async function ensureWorkflowRecordWithMeta(
 ): Promise<{ workflowRecordId: string; created: boolean }> {
   const workflowInstancePageIdKey = normalizeNotionId(args.workflowInstancePageId);
 
-  const findData = await queryDatabase(args.workflowRecordsDbId, {
+  const findData = await queryDatabase(args.ctx, args.workflowRecordsDbId, {
     body: {
       filter: {
         and: [
@@ -55,7 +57,7 @@ export async function ensureWorkflowRecordWithMeta(
 
   const name = `${args.workflowInstancePageName || workflowInstancePageIdKey} — ${args.workflowDefinitionId}`;
 
-  const created = await createPage({
+  const created = await createPage(args.ctx, {
     parentDatabaseId: args.workflowRecordsDbId,
     properties: {
       title: title(name),

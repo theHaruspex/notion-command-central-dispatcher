@@ -88,7 +88,7 @@ export async function processEventsWebhook(args: {
         originDatabaseId: originDatabaseIdKey,
         webhookProperties: webhookEvent.properties,
       }),
-    { origin_db: originDatabaseIdKey, origin_page: originPageName, origin_page_id: originPageIdKey },
+    { origin_db: originDatabaseIdKey, origin_page_id: originPageIdKey },
   );
 
   if (!resolved) {
@@ -96,7 +96,6 @@ export async function processEventsWebhook(args: {
       origin_db: originDatabaseIdKey,
       origin_db_raw: webhookEvent.originDatabaseId,
       origin_page_id: originPageIdKey,
-      origin_page: originPageName,
       webhook_property_keys_count: Object.keys(webhookEvent.properties).length,
     });
     return { ok: true, request_id: ctx.requestId, skipped: true, reason: "no_matching_events_config" };
@@ -107,7 +106,6 @@ export async function processEventsWebhook(args: {
       workflow_definition_id: resolved.workflowDefinitionId,
       origin_db: originDatabaseIdKey,
       origin_page_id: originPageIdKey,
-      origin_page: originPageName,
       state_property_name: resolved.statePropertyName,
       webhook_property_keys_sample: Object.keys(webhookEvent.properties).slice(0, 10),
     });
@@ -115,7 +113,7 @@ export async function processEventsWebhook(args: {
 
   // 5) load workflow definition
   const def = await timeStep(ctx, "get_workflow_definition", () =>
-    getWorkflowDefinitionMeta(resolved.workflowDefinitionId),
+    getWorkflowDefinitionMeta(ctx, resolved.workflowDefinitionId),
   );
 
   if (!def.enabled) {
@@ -123,7 +121,6 @@ export async function processEventsWebhook(args: {
       workflow_definition_id: resolved.workflowDefinitionId,
       origin_db: originDatabaseIdKey,
       origin_page_id: originPageIdKey,
-      origin_page: originPageName,
     });
     return { ok: true, request_id: ctx.requestId, skipped: true, reason: "workflow_definition_disabled" };
   }
@@ -134,7 +131,6 @@ export async function processEventsWebhook(args: {
     eventsCtx.log("warn", "skipped_state_property_missing", {
       origin_db: originDatabaseIdKey,
       origin_page_id: originPageIdKey,
-      origin_page: originPageName,
       state_property_name: resolved.statePropertyName,
     });
     return { ok: true, request_id: ctx.requestId, skipped: true, reason: "state_property_missing" };
@@ -145,7 +141,6 @@ export async function processEventsWebhook(args: {
     eventsCtx.log("warn", "skipped_no_state_value", {
       origin_db: originDatabaseIdKey,
       origin_page_id: originPageIdKey,
-      origin_page: originPageName,
       state_property_name: resolved.statePropertyName,
     });
     return { ok: true, request_id: ctx.requestId, skipped: true, reason: "no_state_value" };
@@ -157,7 +152,7 @@ export async function processEventsWebhook(args: {
     workflowInstance = await timeStep(
       ctx,
       "resolve_workflow_instance",
-      () => resolveWorkflowInstance({ def, webhookEvent, originPageName }),
+      () => resolveWorkflowInstance({ ctx, def, webhookEvent, originPageName }),
       { workflow_type: def.workflowType },
     );
   } catch (err) {
@@ -166,7 +161,6 @@ export async function processEventsWebhook(args: {
         workflow_definition_id: resolved.workflowDefinitionId,
         origin_db: originDatabaseIdKey,
         origin_page_id: originPageIdKey,
-        origin_page: originPageName,
       });
       return { ok: true, request_id: ctx.requestId, skipped: true, reason: "container_property_not_configured" };
     }
@@ -176,7 +170,6 @@ export async function processEventsWebhook(args: {
         workflow_definition_id: resolved.workflowDefinitionId,
         origin_db: originDatabaseIdKey,
         origin_page_id: originPageIdKey,
-        origin_page: originPageName,
       });
       return { ok: true, request_id: ctx.requestId, skipped: true, reason: "container_relation_missing" };
     }
@@ -192,16 +185,18 @@ export async function processEventsWebhook(args: {
   let resolveMode: "scan_relation" | "match_state_value" | "none" = "none";
 
   // 8) dedupe decision
-  const duplicate = await timeStep(ctx, "dedupe_event", () => isDuplicateEvent(cfg.eventsDbId, eventUid));
+  const duplicate = await timeStep(ctx, "dedupe_event", () =>
+    isDuplicateEvent(ctx, cfg.eventsDbId, eventUid),
+  );
   if (duplicate) {
-    eventsCtx.log("info", "event_deduped", { event_uid: eventUid, attempt, origin_page: originPageName });
+    eventsCtx.log("info", "event_deduped", { event_uid: eventUid, attempt });
     return { ok: true, request_id: ctx.requestId, deduped: true };
   }
 
   const resolvedStep = await timeStep(
     ctx,
     "resolve_workflow_step",
-    () => resolveWorkflowStepId({ def, webhookEvent, stateValue }),
+    () => resolveWorkflowStepId({ ctx, def, webhookEvent, stateValue }),
     { workflow_type: def.workflowType },
   );
   workflowStepId = resolvedStep.workflowStepId;
@@ -210,6 +205,7 @@ export async function processEventsWebhook(args: {
   // 9) ensure workflow record (log created vs reused exactly as before)
   const ensure = await timeStep(ctx, "ensure_workflow_record", () =>
     ensureWorkflowRecordWithMeta({
+      ctx,
       workflowRecordsDbId: cfg.workflowRecordsDbId,
       workflowDefinitionId: resolved.workflowDefinitionId,
       workflowInstancePageId,
@@ -233,12 +229,13 @@ export async function processEventsWebhook(args: {
   eventsCtx.log(
     ensure.created ? "info" : "info",
     ensure.created ? "workflow_record_created" : "workflow_record_reused",
-    { ...logFields, origin_page: originPageName },
+    { ...logFields },
   );
 
   // 10) write event log entry
   await timeStep(ctx, "write_event_log_entry", () =>
     writeEventLogEntry({
+      ctx,
       eventsDbId: cfg.eventsDbId,
       properties: {
         title: title(eventUid),
@@ -265,6 +262,7 @@ export async function processEventsWebhook(args: {
   // 11) update workflow record projection
   await timeStep(ctx, "update_workflow_record_projection", () =>
     updateWorkflowRecordProjection({
+      ctx,
       workflowRecordId: ensure.workflowRecordId,
       eventTimeIso,
     }),
@@ -276,7 +274,6 @@ export async function processEventsWebhook(args: {
     workflow_record_id: ensure.workflowRecordId,
     origin_db: originDatabaseIdKey,
     origin_page_id: originPageIdKey,
-    origin_page: originPageName,
     state_property_name: resolved.statePropertyName,
     state_value: stateValue,
     workflow_step_id: workflowStepId,

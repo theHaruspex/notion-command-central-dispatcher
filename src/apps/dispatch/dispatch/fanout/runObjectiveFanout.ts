@@ -52,7 +52,7 @@ export async function runObjectiveFanout(args: {
     );
   }
 
-  const taskIds = await getRelationIdsFromPageProperty(event.objectiveId, objectiveTasksPropId);
+  const taskIds = await getRelationIdsFromPageProperty(ctx, event.objectiveId, objectiveTasksPropId);
   if (taskIds.length > config.maxFanoutTasks) {
     fanoutCtx.log("warn", "task_count_exceeds_cap", {
       objective_id: event.objectiveId,
@@ -80,6 +80,7 @@ export async function runObjectiveFanout(args: {
     });
 
     await createCommand({
+      ctx,
       commandsDbId,
       titlePropNameOrId: config.commandsCommandNamePropId,
       commandTitle: titleFromRoutes,

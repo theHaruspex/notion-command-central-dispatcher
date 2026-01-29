@@ -1,7 +1,12 @@
 import { queryDatabase } from "../notion";
+import type { RequestContext } from "../../../lib/logging";
 
-export async function isDuplicateEvent(eventsDbId: string, eventUid: string): Promise<boolean> {
-  const data = await queryDatabase(eventsDbId, {
+export async function isDuplicateEvent(
+  ctx: RequestContext,
+  eventsDbId: string,
+  eventUid: string,
+): Promise<boolean> {
+  const data = await queryDatabase(ctx, eventsDbId, {
     body: {
       filter: {
         property: "Event UID",

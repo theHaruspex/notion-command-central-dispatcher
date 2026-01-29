@@ -1,6 +1,8 @@
 import { createPage } from "../notion";
+import type { RequestContext } from "../../../lib/logging";
 
 export interface CreateCommandArgs {
+  ctx: RequestContext;
   commandsDbId: string;
   titlePropNameOrId: string | null;
   commandTitle: string;
@@ -58,7 +60,7 @@ export async function createCommand(args: CreateCommandArgs): Promise<void> {
     ],
   };
 
-  await createPage({
+  await createPage(args.ctx, {
     parentDatabaseId: commandsDbId,
     properties,
   });

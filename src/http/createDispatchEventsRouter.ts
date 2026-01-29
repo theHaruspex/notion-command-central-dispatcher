@@ -5,6 +5,7 @@ import { handleDispatchWebhook } from "../apps/dispatch/handler";
 import { handleEventsWebhook } from "../apps/events/handler";
 import { createRequestContext } from "../lib/logging";
 import { maybeCaptureWebhook } from "../lib/webhook/capture";
+import { extractOriginPageTitle } from "../lib/webhook/extractOriginPageTitle";
 
 function captureDirFor(appName: "dispatch" | "events"): string {
   const base = process.env.WEBHOOK_CAPTURE_DIR ?? "captures/webhooks";
@@ -43,21 +44,31 @@ async function handleWebhookRequest(
   const ctx = createRequestContext({ app: appName, requestId });
   const startedAt = Date.now();
   const httpCtx = ctx.withDomain("http");
+  const sourceEventId = extractSourceEventId(req.body);
+  const originPage = extractOriginPageTitle(req.body) ?? "<unknown>";
+
+  ctx.set({
+    source_event_id: sourceEventId,
+    origin_page: originPage,
+    path: req.path,
+  });
 
   res.on("finish", () => {
+    const contentLength = res.getHeader("content-length");
     httpCtx.log("info", "response_finished", {
       status_code: res.statusCode,
       duration_ms: Date.now() - startedAt,
-      content_length: res.getHeader("content-length"),
+      ...(contentLength !== undefined ? { content_length: contentLength } : {}),
       headers_sent: res.headersSent,
     });
   });
 
   res.on("close", () => {
+    const contentLength = res.getHeader("content-length");
     httpCtx.log("warn", "response_closed", {
       status_code: res.statusCode,
       duration_ms: Date.now() - startedAt,
-      content_length: res.getHeader("content-length"),
+      ...(contentLength !== undefined ? { content_length: contentLength } : {}),
       headers_sent: res.headersSent,
     });
   });
@@ -78,17 +89,12 @@ async function handleWebhookRequest(
       httpCtx.log("info", "captured_webhook", { capture_dir: captureDir });
     }
 
-    const sourceEventId = extractSourceEventId(req.body);
-    httpCtx.log("info", "request_received", {
-      path: req.path,
-      method: req.method,
-      source_event: sourceEventId,
-    });
+    httpCtx.log("info", "request_received");
 
     if (process.env.DEBUG_PAYLOADS === "1") {
-      httpCtx
-        .withDomain("ingress")
-        .log("info", "payload_preview", { preview: getPayloadPreview(req.body) });
+      httpCtx.withDomain("ingress").log("info", "payload_preview", {
+        payload_preview: getPayloadPreview(req.body),
+      });
     }
 
     // Acceptance: ack is sent immediately; async processing logs later.

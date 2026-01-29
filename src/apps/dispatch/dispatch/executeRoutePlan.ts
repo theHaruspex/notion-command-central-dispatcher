@@ -87,6 +87,7 @@ export async function executeRoutePlan(args: {
       });
 
       await createCommand({
+        ctx,
         commandsDbId,
         titlePropNameOrId: config.commandsCommandNamePropId || "Name",
         commandTitle: routeName,
